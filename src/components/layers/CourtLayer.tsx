@@ -56,6 +56,34 @@ const CourtLayer: React.FC = () => {
     const boardHeight = courtHeight * 0.1;
 
     const freeThrowRadius = laneHeight * 0.5;
+    const laneMarkLength = laneHeight * 0.08;
+    const dashPositions = [0.5, 0.7, 0.9].map(
+      (ratio) => baselineX + interiorDir * laneDepth * ratio,
+    );
+    const blockThickness = laneHeight * 0.06;
+    const blockLength = laneDepth * 0.08;
+    const blockOffset = laneDepth * 0.3;
+    const blockCenterX = baselineX + interiorDir * blockOffset;
+    const blockStartX = blockCenterX - blockLength / 2;
+    const threePointCenterX = blockCenterX + interiorDir * (blockLength / 2);
+    const threePointRadius =
+      Math.abs(freeThrowLineX - threePointCenterX) + freeThrowRadius;
+    const topThreeY = clamp(centerY - threePointRadius, top, top + courtHeight);
+    const bottomThreeY = clamp(
+      centerY + threePointRadius,
+      top,
+      top + courtHeight,
+    );
+    const threePointArcPoints = makeArcPoints(
+      threePointCenterX,
+      centerY,
+      threePointRadius,
+      -Math.PI / 2,
+      Math.PI / 2,
+      48,
+      interiorDir,
+      1,
+    );
 
     return (
       <Group key={side}>
@@ -107,6 +135,55 @@ const CourtLayer: React.FC = () => {
           strokeWidth={2}
         />
         <Circle x={rimX} y={centerY} radius={rimRadius} stroke={lineColor} strokeWidth={3} fill="#d97706" />
+        {dashPositions.map((x) => (
+          <React.Fragment key={`full-dash-${side}-${x}`}>
+            <Line
+              points={[x, laneTop - laneMarkLength, x, laneTop]}
+              stroke={lineColor}
+              strokeWidth={2}
+            />
+            <Line
+              points={[x, laneTop + laneHeight, x, laneTop + laneHeight + laneMarkLength]}
+              stroke={lineColor}
+              strokeWidth={2}
+            />
+          </React.Fragment>
+        ))}
+        <Rect
+          x={blockStartX}
+          y={laneTop - blockThickness}
+          width={blockLength}
+          height={blockThickness}
+          fill="#f7e8c8"
+          stroke={lineColor}
+          strokeWidth={2}
+        />
+        <Rect
+          x={blockStartX}
+          y={laneTop + laneHeight}
+          width={blockLength}
+          height={blockThickness}
+          fill="#f7e8c8"
+          stroke={lineColor}
+          strokeWidth={2}
+        />
+        <Line
+          points={threePointArcPoints}
+          stroke={lineColor}
+          strokeWidth={2}
+          closed={false}
+          lineCap="round"
+        />
+        <Line
+          points={[baselineX, topThreeY, threePointCenterX, topThreeY]}
+          stroke={lineColor}
+          strokeWidth={2}
+        />
+        <Line
+          points={[baselineX, bottomThreeY, threePointCenterX, bottomThreeY]}
+          stroke={lineColor}
+          strokeWidth={2}
+        />
       </Group>
     );
   };
