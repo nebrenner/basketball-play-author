@@ -1,6 +1,6 @@
 import React from "react";
 import { usePlayStore } from "../../app/store";
-import { exportAnimationAsGif, exportCurrentFrameAsImage } from "../../features/export/exporters";
+import { exportAnimationAsVideo, exportCurrentFrameAsImage } from "../../features/export/exporters";
 
 const Btn: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement>> = ({ children, ...rest }) => (
   <button
@@ -27,7 +27,7 @@ const PlaybackControls: React.FC = () => {
   const speed = usePlayStore((s) => s.speed);
   const setSpeed = usePlayStore((s) => s.setSpeed);
   const canExport = usePlayStore((s) => Boolean(s.stageRef && s.play && s.play.frames.length > 0));
-  const [pending, setPending] = React.useState<null | "image" | "animation">(null);
+  const [pending, setPending] = React.useState<null | "image" | "video">(null);
 
   const handleExportImage = React.useCallback(async () => {
     if (pending) return;
@@ -41,13 +41,13 @@ const PlaybackControls: React.FC = () => {
     }
   }, [pending]);
 
-  const handleExportAnimation = React.useCallback(async () => {
+  const handleExportVideo = React.useCallback(async () => {
     if (pending) return;
-    setPending("animation");
+    setPending("video");
     try {
-      await exportAnimationAsGif();
+      await exportAnimationAsVideo();
     } catch (error) {
-      console.error("Failed to export animation", error);
+      console.error("Failed to export video", error);
     } finally {
       setPending(null);
     }
@@ -92,11 +92,11 @@ const PlaybackControls: React.FC = () => {
       </Btn>
 
       <Btn
-        onClick={handleExportAnimation}
+        onClick={handleExportVideo}
         disabled={!canExport || pending !== null}
-        title="Download all frames as an animated GIF"
+        title="Record the full animation as a WebM video"
       >
-        Export Animation
+        Export Video
       </Btn>
     </div>
   );

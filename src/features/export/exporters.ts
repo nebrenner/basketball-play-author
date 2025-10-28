@@ -1,10 +1,11 @@
 import { downloadBlob, downloadDataUrl } from "./download";
 import { usePlayStore } from "../../app/store";
-import { GIFEncoder, applyPalette, quantize } from "gifenc";
 import type Konva from "konva";
 
 const IMAGE_PIXEL_RATIO = 2;
-const GIF_PIXEL_RATIO = 1;
+const VIDEO_PIXEL_RATIO = 1;
+const VIDEO_FPS = 60;
+const FINAL_FRAME_HOLD_MS = 300;
 
 function sanitizeName(name: string | undefined, fallback: string): string {
   const base = name?.trim() ?? "";
@@ -34,14 +35,17 @@ async function waitForStage(stage: Konva.Stage) {
   await nextFrame();
 }
 
-function captureStagePixels(stage: Konva.Stage, pixelRatio: number) {
-  const canvas = stage.toCanvas({ pixelRatio });
-  const context = canvas.getContext("2d");
-  if (!context) {
-    throw new Error("Unable to access 2D context for export");
+function pickVideoMimeType(): string | null {
+  if (typeof window === "undefined") return null;
+  if (typeof MediaRecorder === "undefined") return null;
+
+  const candidates = ["video/webm;codecs=vp9", "video/webm;codecs=vp8", "video/webm"];
+  for (const type of candidates) {
+    if (MediaRecorder.isTypeSupported(type)) {
+      return type;
+    }
   }
-  const { data, width, height } = context.getImageData(0, 0, canvas.width, canvas.height);
-  return { data, width, height };
+  return null;
 }
 
 export async function exportCurrentFrameAsImage(): Promise<void> {
@@ -64,7 +68,7 @@ export async function exportCurrentFrameAsImage(): Promise<void> {
   downloadDataUrl(dataUrl, filename);
 }
 
-export async function exportAnimationAsGif(): Promise<void> {
+export async function exportAnimationAsVideo(): Promise<void> {
   const initialState = usePlayStore.getState();
   const stage = initialState.stageRef;
   const play = initialState.play;
@@ -78,49 +82,98 @@ export async function exportAnimationAsGif(): Promise<void> {
     return;
   }
 
+  if (typeof document === "undefined") {
+    console.warn("Export skipped: document unavailable");
+    return;
+  }
+
+  const mimeType = pickVideoMimeType();
+  if (!mimeType) {
+    console.warn("Export skipped: MediaRecorder or requested codec unsupported");
+    return;
+  }
+
   const originalIndex = initialState.currentFrameIndex;
   const wasPlaying = initialState.isPlaying;
   if (wasPlaying) {
     initialState.pauseAnimation();
   }
 
-  const speed = initialState.speed <= 0 ? 1 : initialState.speed;
-  const frameDelay = Math.max(20, Math.round(initialState.baseDurationMs / speed));
-  const encoder = GIFEncoder();
-  let palette: number[][] | null = null;
+  const captureCanvas = document.createElement("canvas");
+  const context = captureCanvas.getContext("2d");
+  if (!context) {
+    throw new Error("Unable to access 2D context for video export");
+  }
+
+  if (typeof captureCanvas.captureStream !== "function") {
+    console.warn("Export skipped: canvas.captureStream is unsupported");
+    return;
+  }
+
+  const stream = captureCanvas.captureStream(VIDEO_FPS);
+  const recorder = new MediaRecorder(stream, { mimeType });
+
+  const chunks: BlobPart[] = [];
+  const recordingComplete = new Promise<Blob>((resolve, reject) => {
+    recorder.addEventListener("dataavailable", (event) => {
+      if (event.data && event.data.size > 0) {
+        chunks.push(event.data);
+      }
+    });
+    recorder.addEventListener("stop", () => {
+      resolve(new Blob(chunks, { type: mimeType }));
+    });
+    recorder.addEventListener("error", (event) => {
+      reject(event.error ?? new Error("MediaRecorder error"));
+    });
+  });
+
+  let recording = false;
 
   try {
-    for (let i = 0; i < play.frames.length; i += 1) {
-      usePlayStore.getState().setCurrentFrameIndex(i);
-      await waitForStage(stage);
+    usePlayStore.getState().setCurrentFrameIndex(0);
+    await waitForStage(stage);
 
-      const snapshot = captureStagePixels(stage, GIF_PIXEL_RATIO);
-      if (!palette) {
-        palette = quantize(snapshot.data, 256);
-      }
-      if (!palette || palette.length === 0) {
-        console.warn("Export skipped: unable to compute GIF palette");
-        return;
-      }
-      const index = applyPalette(snapshot.data, palette);
-      const frameOptions = {
-        palette,
-        delay: frameDelay,
-        dispose: 2,
-        ...(i === 0 ? { repeat: 0 } : {}),
-      } as const;
-      encoder.writeFrame(index, snapshot.width, snapshot.height, frameOptions);
+    const initialCanvas = stage.toCanvas({ pixelRatio: VIDEO_PIXEL_RATIO });
+    captureCanvas.width = initialCanvas.width;
+    captureCanvas.height = initialCanvas.height;
+    context.clearRect(0, 0, captureCanvas.width, captureCanvas.height);
+    context.drawImage(initialCanvas, 0, 0);
+
+    recorder.start();
+
+    recording = true;
+    const pumpFrame = () => {
+      if (!recording) return;
+      const snapshot = stage.toCanvas({ pixelRatio: VIDEO_PIXEL_RATIO });
+      context.clearRect(0, 0, captureCanvas.width, captureCanvas.height);
+      context.drawImage(snapshot, 0, 0);
+      requestAnimationFrame(pumpFrame);
+    };
+    pumpFrame();
+
+    await new Promise((resolve) => setTimeout(resolve, 100));
+    await usePlayStore.getState().playAnimation();
+    await waitForStage(stage);
+    await new Promise((resolve) => setTimeout(resolve, FINAL_FRAME_HOLD_MS));
+
+    recording = false;
+    if (recorder.state !== "inactive") {
+      recorder.stop();
     }
+  } catch (error) {
+    recording = false;
+    if (recorder.state !== "inactive") {
+      recorder.stop();
+    }
+    throw error;
   } finally {
+    recording = false;
     usePlayStore.getState().setCurrentFrameIndex(originalIndex);
     await waitForStage(stage);
   }
 
-  encoder.finish();
-  const bytesView = encoder.bytesView();
-  const bytes = new Uint8Array(bytesView.length);
-  bytes.set(bytesView);
-  const blob = new Blob([bytes], { type: "image/gif" });
-  const filename = buildFilename(play.meta.name, "animation", "gif");
+  const blob = await recordingComplete;
+  const filename = buildFilename(play.meta.name, "animation", "webm");
   downloadBlob(blob, filename);
 }
