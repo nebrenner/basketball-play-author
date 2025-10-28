@@ -28,7 +28,7 @@ const TimelineBar: React.FC = () => {
   if (!play) return null;
 
   return (
-    <div style={{ display: "flex", gap: 8, alignItems: "center", padding: 8, borderBottom: "1px solid #1e293b" }}>
+    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
       <Btn onClick={() => setIndex(Math.max(0, idx - 1))} disabled={idx <= 0}>◀ Prev</Btn>
       <div style={{ color: "#cbd5e1", fontSize: 13 }}>Frame {idx + 1} / {total}</div>
       <Btn onClick={() => setIndex(Math.min(total - 1, idx + 1))} disabled={idx >= total - 1}>Next ▶</Btn>
