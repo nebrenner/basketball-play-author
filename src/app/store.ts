@@ -32,6 +32,7 @@ type StoreState = {
   editorMode: EditorMode;
   currentFrameIndex: number;
   snapToGrid: boolean;
+  selectedTokenId: Id | null;
 
   draftArrow: DraftArrow;
 
@@ -49,6 +50,7 @@ type StoreState = {
   setCourtType: (type: CourtType) => void;
   initDefaultPlay: (name?: string) => void;
   setTokenPosition: (tokenId: Id, xy: XY) => void;
+  setSelectedToken: (id: Id | null) => void;
 
   // arrow authoring
   beginArrow: (kind: ArrowKind, fromTokenId: Id, start: XY) => void;
@@ -122,6 +124,7 @@ export const usePlayStore = create<StoreState>()(
     editorMode: "select",
     currentFrameIndex: 0,
     snapToGrid: true,
+    selectedTokenId: null,
 
     draftArrow: { active: false },
 
@@ -186,6 +189,7 @@ export const usePlayStore = create<StoreState>()(
         s.currentFrameIndex = 0;
         s.editorMode = "select";
         s.draftArrow = { active: false };
+        s.selectedTokenId = null;
       });
     },
 
@@ -196,6 +200,12 @@ export const usePlayStore = create<StoreState>()(
         if (!frame) return;
         frame.tokens[tokenId] = snap({ x: xy.x, y: xy.y }, s.snapToGrid);
         s.play.meta.updatedAt = new Date().toISOString();
+      });
+    },
+
+    setSelectedToken(id) {
+      set((s) => {
+        s.selectedTokenId = id;
       });
     },
 
@@ -380,6 +390,7 @@ export const usePlayStore = create<StoreState>()(
           s.editorMode = "select";
           s.draftArrow = { active: false };
           s.courtType = parsed.courtType ?? "half";
+          s.selectedTokenId = null;
         });
         return true;
       } catch (e) {
