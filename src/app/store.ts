@@ -115,7 +115,7 @@ function indexKey() { return `bpa.index`; }
 export const usePlayStore = create<StoreState>()(
   immer((set, get) => ({
     stageWidth: 1000,
-    stageHeight: 600,
+    stageHeight: 720,
     courtType: "half",
 
     play: null,
