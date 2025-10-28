@@ -7,7 +7,7 @@ const VIDEO_PIXEL_RATIO = 1;
 const VIDEO_FPS = 60;
 const FIRST_FRAME_HOLD_MS = 2000;
 const TRANSITION_HOLD_MS = 1000;
-const FINAL_FRAME_HOLD_MS = 5000;
+const FINAL_FRAME_HOLD_MS = 3000;
 
 function wait(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
