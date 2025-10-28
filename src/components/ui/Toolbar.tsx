@@ -35,7 +35,7 @@ const Toolbar: React.FC = () => {
   }, [play]);
 
   return (
-    <div style={{ display: "flex", gap: 8, alignItems: "center", padding: 8, borderBottom: "1px solid #1e293b" }}>
+    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
       {play && (
         <span style={{ color: "#cbd5e1", fontSize: 12, paddingLeft: 4 }}>
           Ball: {possessionLabel}

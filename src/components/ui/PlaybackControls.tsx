@@ -32,7 +32,7 @@ const PlaybackControls: React.FC = () => {
   });
 
   return (
-    <div style={{ display: "flex", gap: 8, alignItems: "center", padding: 8, borderBottom: "1px solid #1e293b" }}>
+    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
       {!isPlaying ? (
         <Btn onClick={play} title="Play">Play ▶</Btn>
       ) : (
