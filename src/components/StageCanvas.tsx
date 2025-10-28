@@ -2,33 +2,17 @@ import React from "react";
 import type { KonvaEventObject } from "konva/lib/Node";
 import { Stage, Layer } from "react-konva";
 import { usePlayStore } from "../app/store";
-import type { EditorMode } from "../app/store";
-import type { Id, XY, Play, Frame, ArrowKind } from "../app/types";
+import type { ArrowKind, XY } from "../app/types";
 import CourtLayer from "./layers/CourtLayer";
 import ArrowLayer from "./layers/ArrowLayer";
 import TokenLayer from "./layers/TokenLayer";
 import "./../main.css";
 
-const getKindFromMode = (mode: EditorMode) =>
-  mode.startsWith("arrow:") ? (mode.split(":")[1] as "cut" | "dribble" | "screen" | "pass") : null;
-
-const pointerPosition = (e: KonvaEventObject<MouseEvent>): XY | null => {
-  const stage = e.target.getStage();
-  const pos = stage?.getPointerPosition();
-  if (!pos) return null;
-  return { x: pos.x, y: pos.y };
-};
-
-const tokenAt = (xy: XY, play: Play, frame: Frame): Id | null => {
-  const R = 20;
-  for (const t of play.tokens) {
-    const p = frame.tokens[t.id];
-    if (!p) continue;
-    const dx = p.x - xy.x;
-    const dy = p.y - xy.y;
-    if (dx * dx + dy * dy <= R * R) return t.id;
-  }
-  return null;
+const ARROW_LABELS: Record<ArrowKind, string> = {
+  cut: "Cut",
+  dribble: "Dribble",
+  screen: "Screen",
+  pass: "Pass",
 };
 
 const useContainerSize = () => {
@@ -51,161 +35,49 @@ const StageCanvas: React.FC = () => {
   const { ref, width } = useContainerSize();
   const stageWidth = usePlayStore((s) => s.stageWidth);
   const stageHeight = usePlayStore((s) => s.stageHeight);
-  const dragSeed = React.useRef<{ kind: ArrowKind; fromId: Id; start: XY } | null>(null);
+  const play = usePlayStore((s) => s.play);
+  const currentFrame = usePlayStore((s) => s.currentFrame());
+  const selectedTokenId = usePlayStore((s) => s.selectedTokenId);
+  const setSelectedToken = usePlayStore((s) => s.setSelectedToken);
+  const setSelectedArrow = usePlayStore((s) => s.setSelectedArrow);
+  const createArrow = usePlayStore((s) => s.createArrow);
 
-  // maintain aspect ratio; scale to container width
   const scale = width > 0 ? width / stageWidth : 1;
   const height = stageHeight * scale;
 
-  const ensureArrowPermissions = React.useCallback(
-    (kind: ArrowKind, tokenId: Id, possessionId: Id | undefined, play: Play): boolean => {
-      const token = play.tokens.find((t) => t.id === tokenId);
-      if (!token || token.kind === "BALL") return false;
-      const hasBall = possessionId === tokenId;
-      if (kind === "pass" || kind === "dribble") {
-        return hasBall;
+  const selectedTokenPosition = React.useMemo<XY | null>(() => {
+    if (!selectedTokenId || !currentFrame) return null;
+    const pos = currentFrame.tokens[selectedTokenId];
+    return pos ? { x: pos.x, y: pos.y } : null;
+  }, [selectedTokenId, currentFrame]);
+
+  const arrowFromSelected = React.useMemo(() => {
+    if (!play || !currentFrame || !selectedTokenId) return null;
+    for (const arrowId of currentFrame.arrows) {
+      const arrow = play.arrowsById[arrowId];
+      if (arrow?.from === selectedTokenId) {
+        return arrow;
       }
-      return !hasBall;
-    },
-    [],
-  );
+    }
+    return null;
+  }, [play, currentFrame, selectedTokenId]);
+
+  const allowedArrowKinds = React.useMemo<ArrowKind[]>(() => {
+    if (!play || !selectedTokenId) return [];
+    const token = play.tokens.find((t) => t.id === selectedTokenId);
+    if (!token || token.kind === "BALL") return [];
+    return ["cut", "dribble", "screen", "pass"];
+  }, [play, selectedTokenId]);
 
   const handleStageMouseDown = React.useCallback(
     (e: KonvaEventObject<MouseEvent>) => {
-      const state = usePlayStore.getState();
-      const { editorMode } = state;
-
-      const kind = getKindFromMode(editorMode);
-      const target = e.target;
-      const targetName = target?.name();
-
-      if (!kind) {
-        if (!target || (targetName !== "token-node" && !targetName?.startsWith("arrow-"))) {
-          state.setSelectedToken(null);
-          state.setSelectedArrow(null);
-        }
-        dragSeed.current = null;
-        return;
-      }
-
-      if (targetName && targetName.startsWith("arrow-")) {
-        dragSeed.current = null;
-        return;
-      }
-
-      const pos = pointerPosition(e);
-      if (!pos) {
-        dragSeed.current = null;
-        return;
-      }
-
-      const play = state.play;
-      const curr = state.currentFrame();
-      if (!play || !curr) {
-        dragSeed.current = null;
-        return;
-      }
-
-      const clickedTokenId = tokenAt(pos, play, curr);
-      if (clickedTokenId) {
-        if (state.selectedTokenId !== clickedTokenId) {
-          state.setSelectedToken(clickedTokenId);
-        }
-        state.setSelectedArrow(null);
-      } else {
-        state.setSelectedToken(null);
-        state.setSelectedArrow(null);
-      }
-
-      if (!clickedTokenId) {
-        dragSeed.current = null;
-        return;
-      }
-
-      if (!ensureArrowPermissions(kind, clickedTokenId, play.possession, play)) {
-        dragSeed.current = null;
-        return;
-      }
-
-      const source = curr.tokens[clickedTokenId];
-      if (!source) {
-        dragSeed.current = null;
-        return;
-      }
-
-      dragSeed.current = { kind, fromId: clickedTokenId, start: source };
+      const name = e.target?.name();
+      if (name === "token-node" || name?.startsWith("arrow-")) return;
+      setSelectedToken(null);
+      setSelectedArrow(null);
     },
-    [ensureArrowPermissions],
+    [setSelectedToken, setSelectedArrow],
   );
-
-  const handleStageMouseMove = React.useCallback((e: KonvaEventObject<MouseEvent>) => {
-    const state = usePlayStore.getState();
-    const pos = pointerPosition(e);
-    if (!pos) return;
-
-    const draft = state.draftArrow;
-    if (draft.active) {
-      state.updateArrowPreview(pos);
-      return;
-    }
-
-    if (dragSeed.current) {
-      const { start, kind, fromId } = dragSeed.current;
-      const dx = pos.x - start.x;
-      const dy = pos.y - start.y;
-      const distSq = dx * dx + dy * dy;
-      if (distSq > 25) {
-        state.beginArrow(kind, fromId, start);
-        state.startArrowDrag();
-        state.updateArrowPreview(pos);
-        dragSeed.current = null;
-      }
-    }
-  }, []);
-
-  const handleStageMouseUp = React.useCallback((e: KonvaEventObject<MouseEvent>) => {
-    const state = usePlayStore.getState();
-    const draft = state.draftArrow;
-    if (!draft.active) {
-      dragSeed.current = null;
-      return;
-    }
-
-    const pos = pointerPosition(e);
-    if (!pos) {
-      state.cancelArrow();
-      dragSeed.current = null;
-      return;
-    }
-
-    const play = state.play;
-    const curr = state.currentFrame();
-    if (!play || !curr) {
-      state.cancelArrow();
-      dragSeed.current = null;
-      return;
-    }
-
-    if (draft.kind === "pass") {
-      const toId = tokenAt(pos, play, curr);
-      if (toId && toId !== draft.fromTokenId) {
-        state.commitArrowToToken(toId);
-      } else {
-        state.cancelArrow();
-      }
-    } else {
-      state.commitArrowToPoint(pos);
-    }
-    dragSeed.current = null;
-  }, []);
-
-  const handleStageMouseLeave = React.useCallback(() => {
-    const state = usePlayStore.getState();
-    if (state.draftArrow.active) {
-      state.cancelArrow();
-    }
-    dragSeed.current = null;
-  }, []);
 
   React.useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
@@ -218,16 +90,28 @@ const StageCanvas: React.FC = () => {
       }
       if (event.key === "Escape") {
         const state = usePlayStore.getState();
-        if (state.draftArrow.active) {
-          state.cancelArrow();
-        } else if (state.selectedArrowId) {
+        if (state.selectedArrowId || state.selectedTokenId) {
+          event.preventDefault();
           state.setSelectedArrow(null);
+          state.setSelectedToken(null);
         }
       }
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
   }, []);
+
+  const padding = 8;
+  const showArrowMenu = selectedTokenPosition && allowedArrowKinds.length > 0;
+  const menuPosition = React.useMemo(() => {
+    if (!selectedTokenPosition) return null;
+    const left = padding + selectedTokenPosition.x * scale + 16;
+    const top = padding + selectedTokenPosition.y * scale - 56;
+    return {
+      left,
+      top: Math.max(padding, top),
+    };
+  }, [selectedTokenPosition, scale]);
 
   return (
     <div className="canvas-wrap" ref={ref} style={{ height }}>
@@ -237,9 +121,6 @@ const StageCanvas: React.FC = () => {
         scale={{ x: scale, y: scale }}
         className="stage-root"
         onMouseDown={handleStageMouseDown}
-        onMouseMove={handleStageMouseMove}
-        onMouseUp={handleStageMouseUp}
-        onMouseLeave={handleStageMouseLeave}
       >
         <Layer listening={false}>
           <CourtLayer />
@@ -253,6 +134,22 @@ const StageCanvas: React.FC = () => {
           <TokenLayer />
         </Layer>
       </Stage>
+
+      {showArrowMenu && menuPosition && (
+        <div className="arrow-menu" style={{ left: menuPosition.left, top: menuPosition.top }}>
+          {allowedArrowKinds.map((kind) => (
+            <button
+              key={kind}
+              type="button"
+              disabled={!!arrowFromSelected}
+              onClick={() => selectedTokenId && createArrow(kind, selectedTokenId)}
+              title={arrowFromSelected ? "Delete the existing arrow to add a new one" : undefined}
+            >
+              {ARROW_LABELS[kind]}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 };

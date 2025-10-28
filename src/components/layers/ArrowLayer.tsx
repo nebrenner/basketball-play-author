@@ -6,9 +6,9 @@ import { styleFor } from "../../features/arrows/arrowStyles";
 
 const toFlatPoints = (points: XY[]): number[] => points.flatMap((p) => [p.x, p.y]);
 
-const ArrowGlyph: React.FC<{ arrow: ArrowType; emphasize?: boolean }> = ({ arrow, emphasize }) => {
+const ArrowGlyph: React.FC<{ arrow: ArrowType; emphasize?: boolean; points: XY[] }> = ({ arrow, emphasize, points }) => {
   const s = styleFor(arrow.kind);
-  const pts: number[] = arrow.points.length > 1 ? toFlatPoints(arrow.points) : [];
+  const pts: number[] = points.length > 1 ? toFlatPoints(points) : [];
 
   const common = {
     stroke: s.stroke,
@@ -63,12 +63,10 @@ const getArrowEnd = (arrow: ArrowType, frame: Frame): XY | null => {
 const ArrowLayer: React.FC = () => {
   const play = usePlayStore((s) => s.play);
   const curr = usePlayStore((s) => s.currentFrame());
-  const draft = usePlayStore((s) => s.draftArrow);
   const selectedArrowId = usePlayStore((s) => s.selectedArrowId);
   const setSelectedArrow = usePlayStore((s) => s.setSelectedArrow);
   const updateArrowEndpoint = usePlayStore((s) => s.updateArrowEndpoint);
   const deleteArrow = usePlayStore((s) => s.deleteArrow);
-  const editorMode = usePlayStore((s) => s.editorMode);
 
   if (!play || !curr) return null;
 
@@ -80,17 +78,15 @@ const ArrowLayer: React.FC = () => {
     setSelectedArrow(id);
   };
 
-  const canEditArrow = (arrow: ArrowType) => arrow.kind !== "pass" && editorMode === "select";
-
   return (
     <Group>
       {arrows.map((arrow) => {
         const isSelected = arrow.id === selectedArrowId;
         const start = getArrowStart(arrow, curr, play);
         const end = getArrowEnd(arrow, curr);
-        const canEdit = canEditArrow(arrow);
         const handlePoint = end ?? undefined;
         const midPoint = start && end ? { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 } : null;
+        const renderPoints = start && end ? [start, end] : arrow.points;
 
         return (
           <Group
@@ -101,7 +97,7 @@ const ArrowLayer: React.FC = () => {
               handleSelect(arrow.id);
             }}
           >
-            <ArrowGlyph arrow={arrow} emphasize={isSelected} />
+            <ArrowGlyph arrow={arrow} emphasize={isSelected} points={renderPoints} />
 
             {handlePoint && (
               <Circle
@@ -112,17 +108,15 @@ const ArrowLayer: React.FC = () => {
                 fill={isSelected ? "#f8fafc" : "#cbd5f5"}
                 stroke="#1e293b"
                 strokeWidth={1}
-                draggable={canEdit}
+                draggable={isSelected}
                 onMouseDown={(ev) => {
                   ev.cancelBubble = true;
                   handleSelect(arrow.id);
                 }}
                 onDragMove={(ev) => {
-                  if (!canEdit) return;
                   updateArrowEndpoint(arrow.id, { x: ev.target.x(), y: ev.target.y() });
                 }}
                 onDragEnd={(ev) => {
-                  if (!canEdit) return;
                   updateArrowEndpoint(arrow.id, { x: ev.target.x(), y: ev.target.y() });
                 }}
               />
@@ -153,19 +147,6 @@ const ArrowLayer: React.FC = () => {
           </Group>
         );
       })}
-
-      {draft.active && (
-        <ArrowGlyph
-          arrow={{
-            id: "__draft__",
-            from: draft.fromTokenId,
-            toPoint: undefined,
-            toTokenId: undefined,
-            kind: draft.kind,
-            points: draft.points,
-          }}
-        />
-      )}
     </Group>
   );
 };

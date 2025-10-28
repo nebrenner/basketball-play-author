@@ -2,8 +2,6 @@ import React from "react";
 import { Group, Rect, Line, Circle, Arc } from "react-konva";
 import { usePlayStore } from "../../app/store";
 
-const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
-
 const makeArcPoints = (
   cx: number,
   cy: number,

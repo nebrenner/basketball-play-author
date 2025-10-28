@@ -53,9 +53,41 @@ body {
   border: 1px solid #1f2937;
   border-radius: 12px;
   padding: 8px;
+  position: relative;
 }
 
 .stage-root {
   background: #0b1220;
   border-radius: 8px;
+}
+
+.arrow-menu {
+  position: absolute;
+  display: flex;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 8px;
+  border: 1px solid rgba(30, 41, 59, 0.8);
+  background: rgba(15, 23, 42, 0.92);
+  box-shadow: 0 10px 18px rgba(2, 6, 23, 0.45);
+  backdrop-filter: blur(3px);
+}
+
+.arrow-menu button {
+  padding: 4px 8px;
+  border-radius: 6px;
+  border: 1px solid #334155;
+  background: #0f172a;
+  color: #e2e8f0;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.arrow-menu button:hover:not(:disabled) {
+  background: #1e293b;
+}
+
+.arrow-menu button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }

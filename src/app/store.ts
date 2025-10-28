@@ -6,37 +6,16 @@ import { advanceFrame as computeNextFrame } from "../features/frames/frameEngine
 import { runPlayStep } from "../features/frames/playback";
 import { PlaySchema } from "./schema";
 
-export type EditorMode =
-  | "select"
-  | "arrow:cut"
-  | "arrow:dribble"
-  | "arrow:screen"
-  | "arrow:pass"
-  | "pan";
-
-type DraftArrow =
-  | {
-      active: true;
-      kind: ArrowKind;
-      fromTokenId: Id;
-      points: XY[];
-      hasStarted: boolean;
-    }
-  | { active: false };
-
 type StoreState = {
   stageWidth: number;
   stageHeight: number;
   courtType: CourtType;
 
   play: Play | null;
-  editorMode: EditorMode;
   currentFrameIndex: number;
   snapToGrid: boolean;
   selectedTokenId: Id | null;
   selectedArrowId: Id | null;
-
-  draftArrow: DraftArrow;
 
   // playback
   isPlaying: boolean;
@@ -47,7 +26,6 @@ type StoreState = {
   currentFrame(): Frame | null;
 
   // editor actions
-  setMode: (mode: EditorMode) => void;
   setSnap: (value: boolean) => void;
   setCourtType: (type: CourtType) => void;
   initDefaultPlay: (name?: string) => void;
@@ -57,12 +35,7 @@ type StoreState = {
   setPossession: (id: Id | null) => void;
 
   // arrow authoring
-  beginArrow: (kind: ArrowKind, fromTokenId: Id, start: XY) => void;
-  startArrowDrag: () => void;
-  updateArrowPreview: (pt: XY) => void;
-  commitArrowToPoint: (finalPoint: XY) => void;
-  commitArrowToToken: (toTokenId: Id) => void;
-  cancelArrow: () => void;
+  createArrow: (kind: ArrowKind, fromTokenId: Id) => void;
   updateArrowEndpoint: (arrowId: Id, point: XY) => void;
   deleteArrow: (arrowId: Id) => void;
 
@@ -128,13 +101,10 @@ export const usePlayStore = create<StoreState>()(
     courtType: "half",
 
     play: null,
-    editorMode: "select",
     currentFrameIndex: 0,
     snapToGrid: true,
     selectedTokenId: null,
     selectedArrowId: null,
-
-    draftArrow: { active: false },
 
     // playback
     isPlaying: false,
@@ -145,14 +115,6 @@ export const usePlayStore = create<StoreState>()(
       const state = get();
       if (!state.play) return null;
       return state.play.frames[state.currentFrameIndex] ?? null;
-    },
-
-    setMode(mode) {
-      set((s) => {
-        s.editorMode = mode;
-        s.draftArrow = { active: false };
-        s.selectedArrowId = null;
-      });
     },
 
     setSnap(value) {
@@ -196,8 +158,6 @@ export const usePlayStore = create<StoreState>()(
           courtType: s.courtType,
         };
         s.currentFrameIndex = 0;
-        s.editorMode = "select";
-        s.draftArrow = { active: false };
         s.selectedTokenId = null;
         s.selectedArrowId = null;
       });
@@ -244,94 +204,36 @@ export const usePlayStore = create<StoreState>()(
     },
 
     // ---- Arrow authoring ----
-    beginArrow(kind, fromTokenId, start) {
+    createArrow(kind, fromTokenId) {
       set((s) => {
-        s.draftArrow = { active: true, kind, fromTokenId, points: [start, start], hasStarted: false };
-      });
-    },
+        if (!s.play) return;
+        const frame = s.play.frames[s.currentFrameIndex];
+        if (!frame) return;
+        const start = frame.tokens[fromTokenId];
+        if (!start) return;
 
-    startArrowDrag() {
-      set((s) => {
-        if (!s.draftArrow.active) return;
-        s.draftArrow.hasStarted = true;
-      });
-    },
+        const existing = frame.arrows.find((arrowId) => {
+          const a = s.play?.arrowsById[arrowId];
+          return a?.from === fromTokenId;
+        });
+        if (existing) return;
 
-    updateArrowPreview(pt) {
-      set((s) => {
-        if (!s.draftArrow.active) return;
-        const arr = s.draftArrow.points;
-        arr[arr.length - 1] = pt;
-      });
-    },
-
-    commitArrowToPoint(finalPoint) {
-      set((s) => {
-        if (!s.play || !s.draftArrow.active) return;
-        const { kind, fromTokenId, points, hasStarted } = s.draftArrow;
-        if (!hasStarted) {
-          s.draftArrow = { active: false };
-          return;
-        }
-        if (kind === "pass") return;
         const id = nanoid();
-        const snapped = snap(finalPoint, s.snapToGrid);
+        const startPoint = { x: start.x, y: start.y };
+        const defaultEnd = snap({ x: start.x + 100, y: start.y }, s.snapToGrid);
         const arrow: Arrow = {
           id,
           from: fromTokenId,
-          toPoint: snapped,
+          toPoint: defaultEnd,
           toTokenId: undefined,
           kind,
-          points: [...points.slice(0, -1), snapped],
+          points: [startPoint, defaultEnd],
         };
         s.play.arrowsById[id] = arrow;
-        const frame = s.play.frames[s.currentFrameIndex];
         frame.arrows.push(id);
-        s.draftArrow = { active: false };
         s.play.meta.updatedAt = new Date().toISOString();
         s.selectedArrowId = id;
-      });
-    },
-
-    commitArrowToToken(toTokenId) {
-      set((s) => {
-        if (!s.play || !s.draftArrow.active) return;
-        const { kind, fromTokenId, points, hasStarted } = s.draftArrow;
-        if (!hasStarted) {
-          s.draftArrow = { active: false };
-          return;
-        }
-        if (kind !== "pass") return;
-        const id = nanoid();
-        const frame = s.play.frames[s.currentFrameIndex];
-        const targetPos = frame?.tokens[toTokenId];
-        const arrow: Arrow = {
-          id,
-          from: fromTokenId,
-          toPoint: targetPos ? { x: targetPos.x, y: targetPos.y } : undefined,
-          toTokenId,
-          kind,
-          points:
-            points.length > 1
-              ? [...points.slice(0, -1), targetPos ?? points[points.length - 1]]
-              : targetPos
-                ? [targetPos]
-                : points,
-        };
-        s.play.arrowsById[id] = arrow;
-        if (frame) {
-          frame.arrows.push(id);
-        }
-        s.draftArrow = { active: false };
-        s.play.possession = toTokenId;
-        s.play.meta.updatedAt = new Date().toISOString();
-        s.selectedArrowId = id;
-      });
-    },
-
-    cancelArrow() {
-      set((s) => {
-        s.draftArrow = { active: false };
+        s.selectedTokenId = null;
       });
     },
 
@@ -340,13 +242,19 @@ export const usePlayStore = create<StoreState>()(
         if (!s.play) return;
         const arrow = s.play.arrowsById[arrowId];
         if (!arrow) return;
-        if (arrow.kind === "pass") return;
         const snapped = snap(point, s.snapToGrid);
         arrow.toPoint = { x: snapped.x, y: snapped.y };
-        if (arrow.points.length) {
-          arrow.points[arrow.points.length - 1] = arrow.toPoint;
+        const frame = s.play.frames[s.currentFrameIndex];
+        const start = frame?.tokens[arrow.from];
+        if (start) {
+          arrow.points = [
+            { x: start.x, y: start.y },
+            { x: arrow.toPoint.x, y: arrow.toPoint.y },
+          ];
+        } else if (arrow.points.length) {
+          arrow.points[arrow.points.length - 1] = { x: arrow.toPoint.x, y: arrow.toPoint.y };
         } else {
-          arrow.points.push(arrow.toPoint);
+          arrow.points.push({ x: arrow.toPoint.x, y: arrow.toPoint.y });
         }
         s.play.meta.updatedAt = new Date().toISOString();
       });
@@ -482,10 +390,9 @@ export const usePlayStore = create<StoreState>()(
         set((s) => {
           s.play = parsed;
           s.currentFrameIndex = 0;
-          s.editorMode = "select";
-          s.draftArrow = { active: false };
           s.courtType = parsed.courtType ?? "half";
           s.selectedTokenId = null;
+          s.selectedArrowId = null;
         });
         return true;
       } catch (e) {

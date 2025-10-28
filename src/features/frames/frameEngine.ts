@@ -20,8 +20,10 @@ export function advanceFrame(play: Play, currentIndex: number): Frame | null {
     if (!a) continue;
 
     if (a.kind === "pass") {
-      // move BALL to target token; shift possession to target
-      if (a.toTokenId) {
+      // move BALL to target point or token
+      if (a.toPoint) {
+        next.tokens["BALL"] = { x: a.toPoint.x, y: a.toPoint.y };
+      } else if (a.toTokenId) {
         const toPos = next.tokens[a.toTokenId];
         if (toPos) {
           next.tokens["BALL"] = { x: toPos.x, y: toPos.y };
