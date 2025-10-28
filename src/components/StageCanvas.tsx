@@ -1,4 +1,5 @@
 import React from "react";
+import type Konva from "konva";
 import type { KonvaEventObject } from "konva/lib/Node";
 import { Stage, Layer } from "react-konva";
 import { usePlayStore } from "../app/store";
@@ -66,17 +67,29 @@ const StageCanvas: React.FC = () => {
     if (!play || !selectedTokenId) return [];
     const token = play.tokens.find((t) => t.id === selectedTokenId);
     if (!token || token.kind === "BALL") return [];
-    return ["cut", "dribble", "screen", "pass"];
+    const hasBall = play.possession === selectedTokenId;
+    return hasBall ? ["dribble", "pass"] : ["cut", "screen"];
   }, [play, selectedTokenId]);
+
+  const isInteractiveTarget = React.useCallback((node: Konva.Node | null) => {
+    let current: Konva.Node | null = node;
+    while (current) {
+      const name = current.name();
+      if (name === "token-node" || name === "arrow-group" || name?.startsWith("arrow-")) {
+        return true;
+      }
+      current = current.getParent();
+    }
+    return false;
+  }, []);
 
   const handleStageMouseDown = React.useCallback(
     (e: KonvaEventObject<MouseEvent>) => {
-      const name = e.target?.name();
-      if (name === "token-node" || name?.startsWith("arrow-")) return;
+      if (isInteractiveTarget(e.target ?? null)) return;
       setSelectedToken(null);
       setSelectedArrow(null);
     },
-    [setSelectedToken, setSelectedArrow],
+    [isInteractiveTarget, setSelectedToken, setSelectedArrow],
   );
 
   React.useEffect(() => {

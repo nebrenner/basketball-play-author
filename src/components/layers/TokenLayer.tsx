@@ -23,9 +23,9 @@ const TokenNode: React.FC<TokenNodeProps> = ({ token, position, possessionId, on
     return () => registerTokenNode(token.id, null);
   }, [token.id]);
 
-  const isBall = token.kind === "BALL";
-  const radius = isBall ? 12 : 18;
-  const fill = isBall ? "#222" : "#2d6cdf";
+  const radius = 18;
+  const fill = "#2d6cdf";
+  const hasBall = possessionId === token.id;
 
   return (
     <Group
@@ -34,20 +34,23 @@ const TokenNode: React.FC<TokenNodeProps> = ({ token, position, possessionId, on
       y={position.y}
       name="token-node"
       draggable={draggable}
-      onMouseDown={() => onSelect(token.id)}
-      onDragStart={() => onSelect(token.id)}
+      onMouseDown={(ev) => {
+        ev.cancelBubble = true;
+        onSelect(token.id);
+      }}
+      onDragStart={(ev) => {
+        ev.cancelBubble = true;
+        onSelect(token.id);
+      }}
       onDragEnd={(e) => {
         const { x, y } = e.target.position();
         onDragEnd(token.id, { x, y });
       }}
     >
-      {possessionId === token.id && !isBall && (
-        <Circle radius={radius + 6} stroke="#94a3b8" strokeWidth={2} opacity={0.6} />
-      )}
       {isSelected && (
         <Circle
           radius={radius + 10}
-          stroke={isBall ? "#f59e0b" : "#f97316"}
+          stroke="#f97316"
           strokeWidth={2}
           opacity={0.6}
         />
@@ -61,10 +64,20 @@ const TokenNode: React.FC<TokenNodeProps> = ({ token, position, possessionId, on
         height={radius * 2}
         offsetX={radius}
         offsetY={radius}
-        fontSize={isBall ? 14 : 16}
-        fill={isBall ? "#f7f7f7" : "#fff"}
+        fontSize={16}
+        fill="#fff"
         fontStyle="bold"
       />
+      {hasBall && (
+        <Circle
+          radius={6}
+          x={radius * 0.85}
+          y={-radius * 0.85}
+          fill="#f59e0b"
+          stroke="#fef08a"
+          strokeWidth={1}
+        />
+      )}
     </Group>
   );
 };
@@ -84,6 +97,7 @@ const TokenLayer: React.FC = () => {
   return (
     <Group>
       {play.tokens.map((token) => {
+        if (token.kind === "BALL") return null;
         const position = curr.tokens[token.id];
         if (!position) return null;
         return (
