@@ -51,11 +51,11 @@ const getArrowStart = (arrow: ArrowType, frame: Frame, play: Play): XY | null =>
 };
 
 const getArrowEnd = (arrow: ArrowType, frame: Frame): XY | null => {
-  if (arrow.toPoint) return arrow.toPoint;
   if (arrow.toTokenId) {
     const target = frame.tokens[arrow.toTokenId];
     if (target) return target;
   }
+  if (arrow.toPoint) return arrow.toPoint;
   const last = arrow.points[arrow.points.length - 1];
   return last ?? null;
 };

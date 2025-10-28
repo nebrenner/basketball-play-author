@@ -4,7 +4,7 @@ import { nanoid } from "nanoid";
 import type { Play, Token, Frame, Id, XY, Arrow, ArrowKind, CourtType } from "./types";
 import { advanceFrame as computeNextFrame } from "../features/frames/frameEngine";
 import { runPlayStep } from "../features/frames/playback";
-import { ballPositionFor } from "../features/tokens/tokenGeometry";
+import { TOKEN_RADIUS, ballPositionFor } from "../features/tokens/tokenGeometry";
 import { PlaySchema } from "./schema";
 
 type StoreState = {
@@ -240,10 +240,34 @@ export const usePlayStore = create<StoreState>()(
         if (!s.play) return;
         const arrow = s.play.arrowsById[arrowId];
         if (!arrow) return;
-        const snapped = snap(point, s.snapToGrid);
-        arrow.toPoint = { x: snapped.x, y: snapped.y };
         const frame = s.play.frames[s.currentFrameIndex];
-        const start = frame?.tokens[arrow.from];
+        if (!frame) return;
+
+        const snapped = snap(point, s.snapToGrid);
+
+        let toPoint = { x: snapped.x, y: snapped.y };
+        let toTokenId: Id | undefined = undefined;
+
+        if (arrow.kind === "pass") {
+          const captureRadius = TOKEN_RADIUS * 1.2;
+          const captureRadiusSq = captureRadius * captureRadius;
+          for (const [tokenId, pos] of Object.entries(frame.tokens)) {
+            if (tokenId === arrow.from) continue;
+            const dx = pos.x - snapped.x;
+            const dy = pos.y - snapped.y;
+            const distSq = dx * dx + dy * dy;
+            if (distSq <= captureRadiusSq) {
+              toTokenId = tokenId;
+              toPoint = { x: pos.x, y: pos.y };
+              break;
+            }
+          }
+        }
+
+        arrow.toTokenId = toTokenId;
+        arrow.toPoint = toPoint;
+
+        const start = frame.tokens[arrow.from];
         if (start) {
           arrow.points = [
             { x: start.x, y: start.y },
@@ -254,6 +278,7 @@ export const usePlayStore = create<StoreState>()(
         } else {
           arrow.points.push({ x: arrow.toPoint.x, y: arrow.toPoint.y });
         }
+
         s.play.meta.updatedAt = new Date().toISOString();
       });
     },
