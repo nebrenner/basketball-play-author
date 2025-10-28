@@ -51,8 +51,6 @@ const StageCanvas: React.FC = () => {
   const { ref, width } = useContainerSize();
   const stageWidth = usePlayStore((s) => s.stageWidth);
   const stageHeight = usePlayStore((s) => s.stageHeight);
-  const dragSeed = React.useRef<{ kind: ArrowKind; fromId: Id; start: XY } | null>(null);
-
   // maintain aspect ratio; scale to container width
   const scale = width > 0 ? width / stageWidth : 1;
   const height = stageHeight * scale;
@@ -78,12 +76,8 @@ const StageCanvas: React.FC = () => {
       const kind = getKindFromMode(editorMode);
       const target = e.target;
       const targetName = target?.name();
-
       const pos = pointerPosition(e);
-      if (!pos) {
-        dragSeed.current = null;
-        return;
-      }
+      if (!pos) return;
 
       if (!kind) {
         const play = state.play;
@@ -94,136 +88,79 @@ const StageCanvas: React.FC = () => {
             if (state.selectedTokenId !== clickedTokenId) {
               state.setSelectedToken(clickedTokenId);
             }
-            dragSeed.current = null;
+            state.setSelectedArrow(null);
             return;
           }
         }
 
-        if (!target || (!targetName || !targetName.startsWith("arrow-"))) {
+        if (!target || !targetName || !targetName.startsWith("arrow-")) {
           state.setSelectedToken(null);
           state.setSelectedArrow(null);
         }
-        dragSeed.current = null;
         return;
       }
 
       if (targetName && targetName.startsWith("arrow-")) {
-        dragSeed.current = null;
+        state.setSelectedArrow(targetName.replace("arrow-", ""));
         return;
       }
 
       const play = state.play;
       const curr = state.currentFrame();
       if (!play || !curr) {
-        dragSeed.current = null;
         return;
       }
 
+      const fromTokenId = state.selectedTokenId;
       const clickedTokenId = tokenAt(pos, play, curr);
-      if (clickedTokenId) {
-        if (state.selectedTokenId !== clickedTokenId) {
+
+      if (!fromTokenId) {
+        if (clickedTokenId) {
           state.setSelectedToken(clickedTokenId);
+          state.setSelectedArrow(null);
         }
-        state.setSelectedArrow(null);
-      } else {
-        state.setSelectedToken(null);
-        state.setSelectedArrow(null);
-      }
-
-      if (!clickedTokenId) {
-        dragSeed.current = null;
         return;
       }
 
-      if (!ensureArrowPermissions(kind, clickedTokenId, play.possession, play)) {
-        dragSeed.current = null;
+      if (!ensureArrowPermissions(kind, fromTokenId, play.possession, play)) {
         return;
       }
 
-      const source = curr.tokens[clickedTokenId];
+      const source = curr.tokens[fromTokenId];
       if (!source) {
-        dragSeed.current = null;
         return;
       }
 
-      dragSeed.current = { kind, fromId: clickedTokenId, start: source };
-      state.beginArrow(kind, clickedTokenId, source);
+      if (kind === "pass") {
+        const toTokenId = clickedTokenId;
+        if (!toTokenId || toTokenId === fromTokenId) {
+          return;
+        }
+
+        state.beginArrow(kind, fromTokenId, source);
+        state.startArrowDrag();
+        const targetPos = curr.tokens[toTokenId];
+        if (targetPos) {
+          state.updateArrowPreview(targetPos);
+        }
+        state.commitArrowToToken(toTokenId);
+        return;
+      }
+
+      const dx = pos.x - source.x;
+      const dy = pos.y - source.y;
+      const distSq = dx * dx + dy * dy;
+      if (distSq < 9) {
+        return;
+      }
+
+      state.beginArrow(kind, fromTokenId, source);
       state.startArrowDrag();
-      state.updateArrowPreview(source);
+      state.updateArrowPreview(pos);
+      state.commitArrowToPoint(pos);
     },
     [ensureArrowPermissions],
   );
-
-  const handleStageMouseMove = React.useCallback((e: KonvaEventObject<MouseEvent>) => {
-    const state = usePlayStore.getState();
-    const pos = pointerPosition(e);
-    if (!pos) return;
-
-    const draft = state.draftArrow;
-    if (draft.active) {
-      state.updateArrowPreview(pos);
-      return;
-    }
-  }, []);
-
-  const handleStageMouseUp = React.useCallback((e: KonvaEventObject<MouseEvent>) => {
-    const state = usePlayStore.getState();
-    const draft = state.draftArrow;
-    if (!draft.active) {
-      dragSeed.current = null;
-      return;
-    }
-
-    const pos = pointerPosition(e);
-    if (!pos) {
-      state.cancelArrow();
-      dragSeed.current = null;
-      return;
-    }
-
-    const play = state.play;
-    const curr = state.currentFrame();
-    if (!play || !curr) {
-      state.cancelArrow();
-      dragSeed.current = null;
-      return;
-    }
-
-    const start = dragSeed.current?.start ?? draft.points[0];
-    const minDistanceSq = 9;
-
-    if (draft.kind === "pass") {
-      const toId = tokenAt(pos, play, curr);
-      if (toId && toId !== draft.fromTokenId) {
-        state.updateArrowPreview(pos);
-        state.commitArrowToToken(toId);
-      } else {
-        state.cancelArrow();
-      }
-    } else {
-      if (start) {
-        const dx = pos.x - start.x;
-        const dy = pos.y - start.y;
-        const distSq = dx * dx + dy * dy;
-        if (distSq < minDistanceSq) {
-          state.cancelArrow();
-          dragSeed.current = null;
-          return;
-        }
-      }
-      state.updateArrowPreview(pos);
-      state.commitArrowToPoint(pos);
-    }
-    dragSeed.current = null;
-  }, []);
-
-  const handleStageMouseLeave = React.useCallback(() => {
-    const state = usePlayStore.getState();
-    if (state.draftArrow.active) {
-      state.cancelArrow();
-    }
-    dragSeed.current = null;
-  }, []);
 
   React.useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
@@ -255,9 +192,6 @@ const StageCanvas: React.FC = () => {
         scale={{ x: scale, y: scale }}
         className="stage-root"
         onMouseDown={handleStageMouseDown}
-        onMouseMove={handleStageMouseMove}
-        onMouseUp={handleStageMouseUp}
-        onMouseLeave={handleStageMouseLeave}
       >
         <Layer listening={false}>
           <CourtLayer />
