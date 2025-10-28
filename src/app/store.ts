@@ -7,6 +7,8 @@ import { runPlayStep } from "../features/frames/playback";
 import { TOKEN_RADIUS, ballPositionFor } from "../features/tokens/tokenGeometry";
 import { PlaySchema } from "./schema";
 
+type PlayIndexEntry = { id: string; name: string; updatedAt: string };
+
 type StoreState = {
   stageWidth: number;
   stageHeight: number;
@@ -14,6 +16,7 @@ type StoreState = {
 
   play: Play | null;
   currentFrameIndex: number;
+  storageRevision: number;
   snapToGrid: boolean;
   selectedTokenId: Id | null;
   selectedArrowId: Id | null;
@@ -54,6 +57,7 @@ type StoreState = {
 
   // persistence
   savePlay: () => void;
+  savePlayAsCopy: () => void;
   loadPlay: (id: string) => boolean;
   listLocalPlays: () => Array<{ id: string; name: string; updatedAt: string }>;
   deletePlay: (id: string) => void;
@@ -93,6 +97,37 @@ const snap = (xy: XY, enabled: boolean, grid = 10): XY =>
 function localKey(id: string) { return `bpa.play.${id}`; }
 function indexKey() { return `bpa.index`; }
 
+function readIndex(): PlayIndexEntry[] {
+  const raw = localStorage.getItem(indexKey());
+  if (!raw) return [];
+  try {
+    return JSON.parse(raw) as PlayIndexEntry[];
+  } catch {
+    return [];
+  }
+}
+
+function writeIndex(entries: PlayIndexEntry[]) {
+  if (entries.length > 0) {
+    localStorage.setItem(indexKey(), JSON.stringify(entries));
+  } else {
+    localStorage.removeItem(indexKey());
+  }
+}
+
+function persistPlay(play: Play) {
+  localStorage.setItem(localKey(play.id), JSON.stringify(play));
+  const idx = readIndex();
+  const existing = idx.find((x) => x.id === play.id);
+  if (existing) {
+    existing.name = play.meta.name;
+    existing.updatedAt = play.meta.updatedAt;
+  } else {
+    idx.push({ id: play.id, name: play.meta.name, updatedAt: play.meta.updatedAt });
+  }
+  writeIndex(idx);
+}
+
 export const usePlayStore = create<StoreState>()(
   immer((set, get) => ({
     stageWidth: 1200,
@@ -101,6 +136,7 @@ export const usePlayStore = create<StoreState>()(
 
     play: null,
     currentFrameIndex: 0,
+    storageRevision: 0,
     snapToGrid: true,
     selectedTokenId: null,
     selectedArrowId: null,
@@ -454,18 +490,48 @@ export const usePlayStore = create<StoreState>()(
         console.error("Save failed: invalid play", parsed.error);
         return;
       }
-      localStorage.setItem(localKey(parsed.data.id), JSON.stringify(parsed.data));
-      const idxRaw = localStorage.getItem(indexKey());
-      const idx = idxRaw ? JSON.parse(idxRaw) as Array<{ id:string; name:string; updatedAt:string }> : [];
-      const existing = idx.find((x) => x.id === parsed.data.id);
-      if (existing) {
-        existing.name = parsed.data.meta.name;
-        existing.updatedAt = parsed.data.meta.updatedAt;
-      } else {
-        idx.push({ id: parsed.data.id, name: parsed.data.meta.name, updatedAt: parsed.data.meta.updatedAt });
-      }
-      localStorage.setItem(indexKey(), JSON.stringify(idx));
+      persistPlay(parsed.data);
+      set((s) => {
+        s.storageRevision += 1;
+      });
       console.info("Play saved:", parsed.data.id);
+    },
+
+    savePlayAsCopy() {
+      const state = get();
+      const current = state.play;
+      if (!current) return;
+
+      const baseName = current.meta.name?.trim() || "New Play";
+      const suggestedName = `${baseName} Copy`;
+      const entered = window.prompt("Name this copied play:", suggestedName);
+      const name = entered?.trim();
+      if (!name) {
+        console.info("Copy cancelled: name is required");
+        return;
+      }
+
+      const cloned = JSON.parse(JSON.stringify(current)) as Play;
+      const now = new Date().toISOString();
+      cloned.id = nanoid();
+      cloned.meta = {
+        ...cloned.meta,
+        name,
+        createdAt: now,
+        updatedAt: now,
+      };
+
+      const parsed = PlaySchema.safeParse(cloned);
+      if (!parsed.success) {
+        console.error("Copy failed: invalid play", parsed.error);
+        return;
+      }
+
+      persistPlay(parsed.data);
+      set((s) => {
+        s.storageRevision += 1;
+      });
+      console.info("Play copied:", parsed.data.id);
     },
 
     loadPlay(id: string) {
@@ -491,26 +557,20 @@ export const usePlayStore = create<StoreState>()(
     },
 
     listLocalPlays() {
-      const raw = localStorage.getItem(indexKey());
-      if (!raw) return [];
-      try {
-        const idx = JSON.parse(raw) as Array<{ id:string; name:string; updatedAt:string }>;
-        return idx.sort((a,b) => b.updatedAt.localeCompare(a.updatedAt));
-      } catch {
-        return [];
-      }
+      return readIndex().sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
     },
 
     deletePlay(id) {
-      const raw = localStorage.getItem(indexKey());
-      const idx = raw ? JSON.parse(raw) as Array<{ id:string; name:string; updatedAt:string }> : [];
+      const idx = readIndex();
       const next = idx.filter((entry) => entry.id !== id);
-      if (next.length > 0) {
-        localStorage.setItem(indexKey(), JSON.stringify(next));
-      } else {
-        localStorage.removeItem(indexKey());
-      }
+      const changed = next.length !== idx.length;
+      writeIndex(next);
       localStorage.removeItem(localKey(id));
+      if (changed) {
+        set((s) => {
+          s.storageRevision += 1;
+        });
+      }
     },
   }))
 );
