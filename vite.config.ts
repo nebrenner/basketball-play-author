@@ -1,4 +1,4 @@
-import { defineConfig } from 'vite'
+import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react-swc'
 
 const repoName = process.env.GITHUB_REPOSITORY?.split('/')[1] ?? ''
@@ -8,4 +8,10 @@ const base = repoName ? `/${repoName}/` : '/'
 export default defineConfig({
   base,
   plugins: [react()],
+  test: {
+    globals: true,
+    environment: 'jsdom',
+    setupFiles: './src/test/setup.ts',
+    css: false,
+  },
 })
