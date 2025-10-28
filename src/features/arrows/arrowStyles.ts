@@ -11,7 +11,7 @@ export const styleFor = (kind: ArrowKind) => {
       return { stroke: "#86efac", strokeWidth: 3, dash: undefined, pointerLength: 12, pointerWidth: 12, bezier: false };
     case "pass":
       // curved dashed arc
-      return { stroke: "#f472b6", strokeWidth: 3, dash: [12, 8], pointerLength: 12, pointerWidth: 12, bezier: true };
+      return { stroke: "#f472b6", strokeWidth: 3, dash: [12, 8], pointerLength: 12, pointerWidth: 12, bezier: false };
     default: {
       const exhaustiveCheck: never = kind;
       throw new Error(`Unhandled arrow kind: ${exhaustiveCheck}`);
