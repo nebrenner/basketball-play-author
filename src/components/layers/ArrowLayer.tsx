@@ -3,7 +3,7 @@ import { Group, Arrow as KArrow, Line, Circle, Rect, Text } from "react-konva";
 import { usePlayStore } from "../../app/store";
 import type { Arrow as ArrowType, Id, XY, Frame, Play } from "../../app/types";
 import { styleFor } from "../../features/arrows/arrowStyles";
-import { buildArrowPath } from "../../features/arrows/arrowUtils";
+import { buildArrowPath, hasCustomCurve } from "../../features/arrows/arrowUtils";
 
 const toFlatPoints = (points: XY[]): number[] => points.flatMap((p) => [p.x, p.y]);
 
@@ -23,7 +23,12 @@ const toBezierRenderablePoints = (points: XY[]): XY[] => {
 
 const ArrowGlyph: React.FC<{ arrow: ArrowType; emphasize?: boolean; points: XY[] }> = ({ arrow, emphasize, points }) => {
   const s = styleFor(arrow.kind);
-  const renderable = points.length > 2 ? toBezierRenderablePoints(points) : points;
+  const curved = hasCustomCurve(points);
+  const renderable = curved
+    ? toBezierRenderablePoints(points)
+    : points.length >= 2
+      ? [points[0], points[points.length - 1]]
+      : points;
   const pts: number[] = renderable.length > 1 ? toFlatPoints(renderable) : [];
 
   const common = {
@@ -32,7 +37,7 @@ const ArrowGlyph: React.FC<{ arrow: ArrowType; emphasize?: boolean; points: XY[]
     dash: s.dash,
   } as const;
 
-  const isCurved = renderable.length > 2;
+  const isCurved = curved && renderable.length > 2;
 
   return s.bezier ? (
     <Line
