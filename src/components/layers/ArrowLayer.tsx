@@ -7,9 +7,24 @@ import { buildArrowPath } from "../../features/arrows/arrowUtils";
 
 const toFlatPoints = (points: XY[]): number[] => points.flatMap((p) => [p.x, p.y]);
 
+const toBezierRenderablePoints = (points: XY[]): XY[] => {
+  if (points.length !== 3) return points;
+  const [start, control, end] = points;
+  const control1 = {
+    x: start.x + (control.x - start.x) * (2 / 3),
+    y: start.y + (control.y - start.y) * (2 / 3),
+  };
+  const control2 = {
+    x: end.x + (control.x - end.x) * (2 / 3),
+    y: end.y + (control.y - end.y) * (2 / 3),
+  };
+  return [start, control1, control2, end];
+};
+
 const ArrowGlyph: React.FC<{ arrow: ArrowType; emphasize?: boolean; points: XY[] }> = ({ arrow, emphasize, points }) => {
   const s = styleFor(arrow.kind);
-  const pts: number[] = points.length > 1 ? toFlatPoints(points) : [];
+  const renderable = points.length > 2 ? toBezierRenderablePoints(points) : points;
+  const pts: number[] = renderable.length > 1 ? toFlatPoints(renderable) : [];
 
   const common = {
     stroke: s.stroke,
@@ -17,7 +32,7 @@ const ArrowGlyph: React.FC<{ arrow: ArrowType; emphasize?: boolean; points: XY[]
     dash: s.dash,
   } as const;
 
-  const isCurved = pts.length > 2;
+  const isCurved = renderable.length > 2;
 
   return s.bezier ? (
     <Line
