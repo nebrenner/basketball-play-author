@@ -4,6 +4,7 @@ import { nanoid } from "nanoid";
 import type { Play, Token, Frame, Id, XY, Arrow, ArrowKind, CourtType } from "./types";
 import { advanceFrame as computeNextFrame } from "../features/frames/frameEngine";
 import { runPlayStep } from "../features/frames/playback";
+import { buildArrowPath } from "../features/arrows/arrowUtils";
 import { TOKEN_RADIUS, ballPositionFor } from "../features/tokens/tokenGeometry";
 import { PlaySchema } from "./schema";
 
@@ -39,6 +40,7 @@ type StoreState = {
   // arrow authoring
   createArrow: (kind: ArrowKind, fromTokenId: Id) => void;
   updateArrowEndpoint: (arrowId: Id, point: XY) => void;
+  updateArrowControlPoint: (arrowId: Id, point: XY) => void;
   deleteArrow: (arrowId: Id) => void;
 
   // frames
@@ -229,13 +231,17 @@ export const usePlayStore = create<StoreState>()(
         const id = nanoid();
         const startPoint = { x: start.x, y: start.y };
         const defaultEnd = snap({ x: start.x + 200, y: start.y }, s.snapToGrid);
+        const defaultControl = {
+          x: (startPoint.x + defaultEnd.x) / 2,
+          y: (startPoint.y + defaultEnd.y) / 2,
+        };
         const arrow: Arrow = {
           id,
           from: fromTokenId,
           toPoint: defaultEnd,
           toTokenId: undefined,
           kind,
-          points: [startPoint, defaultEnd],
+          points: [startPoint, defaultControl, defaultEnd],
         };
         s.play.arrowsById[id] = arrow;
         frame.arrows.push(id);
@@ -277,18 +283,42 @@ export const usePlayStore = create<StoreState>()(
         arrow.toTokenId = toTokenId;
         arrow.toPoint = toPoint;
 
-        const start = frame.tokens[arrow.from];
-        if (start) {
-          arrow.points = [
-            { x: start.x, y: start.y },
-            { x: arrow.toPoint.x, y: arrow.toPoint.y },
-          ];
-        } else if (arrow.points.length) {
-          arrow.points[arrow.points.length - 1] = { x: arrow.toPoint.x, y: arrow.toPoint.y };
+        const start = frame.tokens[arrow.from] ?? arrow.points[0] ?? arrow.toPoint;
+        const path = buildArrowPath(arrow, { start, end: arrow.toPoint });
+        if (path.length >= 1) {
+          path[0] = { x: start.x, y: start.y };
+        }
+        const lastIndex = path.length - 1;
+        if (lastIndex >= 0) {
+          path[lastIndex] = { x: arrow.toPoint.x, y: arrow.toPoint.y };
+        }
+        arrow.points = path;
+
+        s.play.meta.updatedAt = new Date().toISOString();
+      });
+    },
+
+    updateArrowControlPoint(arrowId, point) {
+      set((s) => {
+        if (!s.play) return;
+        const arrow = s.play.arrowsById[arrowId];
+        if (!arrow) return;
+        const frame = s.play.frames[s.currentFrameIndex];
+        if (!frame) return;
+
+        const snapped = snap(point, s.snapToGrid);
+
+        const start = frame.tokens[arrow.from] ?? arrow.points[0] ?? snapped;
+        const end = arrow.toPoint ?? arrow.points[arrow.points.length - 1] ?? snapped;
+
+        const path = buildArrowPath(arrow, { start, end });
+        if (path.length < 3) {
+          path.splice(1, 0, { x: snapped.x, y: snapped.y });
         } else {
-          arrow.points.push({ x: arrow.toPoint.x, y: arrow.toPoint.y });
+          path[1] = { x: snapped.x, y: snapped.y };
         }
 
+        arrow.points = path;
         s.play.meta.updatedAt = new Date().toISOString();
       });
     },
@@ -364,17 +394,53 @@ export const usePlayStore = create<StoreState>()(
       const to = s.play.frames[next];
       const durationMs = s.baseDurationMs / s.speed;
 
+      const arrowsInFrame = from.arrows
+        .map((arrowId) => s.play?.arrowsById[arrowId])
+        .filter((arrow): arrow is Arrow => Boolean(arrow));
+
+      const tokenPaths = new Map<Id, XY[]>();
+      for (const arrow of arrowsInFrame) {
+        if (arrow.kind === "pass") continue;
+        const startPos = from.tokens[arrow.from];
+        const endPos = to.tokens[arrow.from];
+        if (!startPos || !endPos) continue;
+        tokenPaths.set(arrow.from, buildArrowPath(arrow, { start: startPos, end: endPos }));
+      }
+
       const moves = Object.keys(to.tokens).flatMap((id) => {
         const a = from.tokens[id];
         const b = to.tokens[id];
         if (!a || !b) return [];
         if (a.x === b.x && a.y === b.y) return [];
-        return [{ id, from: a, to: b }];
+        const path = tokenPaths.get(id);
+        return [{ id, from: a, to: b, path }];
       });
 
       const fromPossessionId = from.possession ?? s.play.possession ?? null;
       const toPossessionId = to.possession ?? fromPossessionId;
-      let ballMove: { from: XY; to: XY } | null = null;
+      let ballMove: { from: XY; to: XY; path?: XY[] } | null = null;
+
+      const passArrowForBall = arrowsInFrame.find(
+        (arrow) => arrow.kind === "pass" && arrow.from === fromPossessionId
+      );
+
+      if (passArrowForBall) {
+        const startPos = from.tokens[passArrowForBall.from];
+        const endPosCandidate = passArrowForBall.toTokenId
+          ? to.tokens[passArrowForBall.toTokenId]
+          : passArrowForBall.toPoint;
+        if (startPos && endPosCandidate) {
+          const path = buildArrowPath(passArrowForBall, { start: startPos, end: endPosCandidate });
+          if (path.length >= 2) {
+            const ballPath = path.map((pt) => ballPositionFor(pt));
+            const fromBall = ballPath[0];
+            const toBall = ballPath[ballPath.length - 1];
+            if (fromBall && toBall && (fromBall.x !== toBall.x || fromBall.y !== toBall.y)) {
+              ballMove = { from: fromBall, to: toBall, path: ballPath };
+            }
+          }
+        }
+      }
 
       if (fromPossessionId) {
         const fromPos = from.tokens[fromPossessionId];
@@ -382,7 +448,7 @@ export const usePlayStore = create<StoreState>()(
         if (fromPos && toPos) {
           const start = ballPositionFor(fromPos);
           const end = ballPositionFor(toPos);
-          if (start.x !== end.x || start.y !== end.y) {
+          if (!ballMove && (start.x !== end.x || start.y !== end.y)) {
             ballMove = { from: start, to: end };
           }
         }

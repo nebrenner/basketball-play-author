@@ -3,6 +3,7 @@ import { Group, Arrow as KArrow, Line, Circle, Rect, Text } from "react-konva";
 import { usePlayStore } from "../../app/store";
 import type { Arrow as ArrowType, Id, XY, Frame, Play } from "../../app/types";
 import { styleFor } from "../../features/arrows/arrowStyles";
+import { buildArrowPath } from "../../features/arrows/arrowUtils";
 
 const toFlatPoints = (points: XY[]): number[] => points.flatMap((p) => [p.x, p.y]);
 
@@ -16,13 +17,14 @@ const ArrowGlyph: React.FC<{ arrow: ArrowType; emphasize?: boolean; points: XY[]
     dash: s.dash,
   } as const;
 
+  const isCurved = pts.length > 2;
+
   return s.bezier ? (
     <Line
       name="arrow-shape"
       points={pts}
       {...common}
-      bezier
-      tension={0.4}
+      bezier={isCurved}
       shadowBlur={emphasize ? 8 : 0}
       shadowColor={s.stroke}
     />
@@ -34,6 +36,7 @@ const ArrowGlyph: React.FC<{ arrow: ArrowType; emphasize?: boolean; points: XY[]
       fill={s.stroke}
       pointerLength={s.pointerLength}
       pointerWidth={s.pointerWidth}
+      bezier={isCurved}
       shadowBlur={emphasize ? 8 : 0}
       shadowColor={s.stroke}
     />
@@ -66,6 +69,7 @@ const ArrowLayer: React.FC = () => {
   const selectedArrowId = usePlayStore((s) => s.selectedArrowId);
   const setSelectedArrow = usePlayStore((s) => s.setSelectedArrow);
   const updateArrowEndpoint = usePlayStore((s) => s.updateArrowEndpoint);
+  const updateArrowControlPoint = usePlayStore((s) => s.updateArrowControlPoint);
   const deleteArrow = usePlayStore((s) => s.deleteArrow);
 
   if (!play || !curr) return null;
@@ -84,9 +88,13 @@ const ArrowLayer: React.FC = () => {
         const isSelected = arrow.id === selectedArrowId;
         const start = getArrowStart(arrow, curr, play);
         const end = getArrowEnd(arrow, curr);
-        const handlePoint = end ?? undefined;
-        const midPoint = start && end ? { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 } : null;
-        const renderPoints = start && end ? [start, end] : arrow.points;
+        const renderPoints = buildArrowPath(arrow, { start, end });
+        const endPoint = renderPoints[renderPoints.length - 1];
+        const controlPoint = renderPoints.length >= 3 ? renderPoints[1] : null;
+        const midPoint =
+          start && end
+            ? { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 }
+            : null;
 
         return (
           <Group
@@ -99,11 +107,34 @@ const ArrowLayer: React.FC = () => {
           >
             <ArrowGlyph arrow={arrow} emphasize={isSelected} points={renderPoints} />
 
-            {handlePoint && (
+            {controlPoint && (
+              <Circle
+                name="arrow-curve-handle"
+                x={controlPoint.x}
+                y={controlPoint.y}
+                radius={6}
+                fill={isSelected ? "#fcd34d" : "#fde68a"}
+                stroke="#b45309"
+                strokeWidth={1}
+                draggable={isSelected}
+                onMouseDown={(ev) => {
+                  ev.cancelBubble = true;
+                  handleSelect(arrow.id);
+                }}
+                onDragMove={(ev) => {
+                  updateArrowControlPoint(arrow.id, { x: ev.target.x(), y: ev.target.y() });
+                }}
+                onDragEnd={(ev) => {
+                  updateArrowControlPoint(arrow.id, { x: ev.target.x(), y: ev.target.y() });
+                }}
+              />
+            )}
+
+            {endPoint && (
               <Circle
                 name="arrow-handle"
-                x={handlePoint.x}
-                y={handlePoint.y}
+                x={endPoint.x}
+                y={endPoint.y}
                 radius={6}
                 fill={isSelected ? "#f8fafc" : "#cbd5f5"}
                 stroke="#1e293b"
