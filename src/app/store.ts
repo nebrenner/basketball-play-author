@@ -1,80 +1,112 @@
-import { create } from 'zustand'
-import { immer } from 'zustand/middleware/immer'
-import { nanoid } from 'nanoid'
-import type { Arrow, Frame, Play, PlayerKind, Token, XY } from './types'
+import { create } from "zustand";
+import { immer } from "zustand/middleware/immer";
+import { nanoid } from "nanoid";
+import type { Play, Token, Frame, Id, XY } from "./types";
 
-type PlayStoreState = {
-  currentPlay: Play | null
-  activeFrameIndex: number
-  createEmptyPlay: (name: string) => void
-  setActiveFrameIndex: (index: number) => void
-  addFrame: () => void
-}
+export type EditorMode =
+  | "select"
+  | "arrow:cut"
+  | "arrow:dribble"
+  | "arrow:screen"
+  | "arrow:pass"
+  | "pan";
 
-const createInitialTokens = (): Token[] => {
-  return [1, 2, 3, 4, 5].map((label): Token => ({
-    id: nanoid(),
-    kind: `P${label}` as PlayerKind,
-    label: String(label),
-  }))
-}
+type StoreState = {
+  // constants for stage logical size
+  stageWidth: number;
+  stageHeight: number;
 
-const createInitialFrame = (tokens: Token[]): Frame => ({
-  id: nanoid(),
-  tokens: tokens.reduce<Record<string, XY>>((acc, token, index) => {
-    acc[token.id] = { x: 100 + index * 40, y: 100 }
-    return acc
-  }, {}),
-  arrows: [],
-})
+  play: Play | null;
+  editorMode: EditorMode;
+  currentFrameIndex: number;
 
-const buildEmptyPlay = (name: string): Play => {
-  const playerTokens = createInitialTokens()
-  const ballToken: Token = { id: nanoid(), kind: 'BALL', label: '●' }
-  const tokens: Token[] = [...playerTokens, ballToken]
-  const frame = createInitialFrame(tokens)
-  const now = new Date().toISOString()
-  return {
-    id: nanoid(),
-    meta: {
-      name,
-      createdAt: now,
-      updatedAt: now,
+  // selectors
+  currentFrame(): Frame | null;
+
+  // actions
+  setMode: (mode: EditorMode) => void;
+  initDefaultPlay: (name?: string) => void;
+  setTokenPosition: (tokenId: Id, xy: XY) => void;
+};
+
+const makeDefaultTokens = (): Token[] => [
+  { id: "P1", kind: "P1", label: "1" },
+  { id: "P2", kind: "P2", label: "2" },
+  { id: "P3", kind: "P3", label: "3" },
+  { id: "P4", kind: "P4", label: "4" },
+  { id: "P5", kind: "P5", label: "5" },
+  { id: "BALL", kind: "BALL", label: "●" },
+];
+
+// simple spread of initial positions across the half court
+const defaultPositions = (W: number, H: number): Record<Id, XY> => ({
+  P1: { x: W * 0.2, y: H * 0.6 },
+  P2: { x: W * 0.35, y: H * 0.4 },
+  P3: { x: W * 0.5, y: H * 0.3 },
+  P4: { x: W * 0.65, y: H * 0.5 },
+  P5: { x: W * 0.8, y: H * 0.6 },
+  BALL: { x: W * 0.2, y: H * 0.6 }, // start with P1
+});
+
+export const usePlayStore = create<StoreState>()(
+  immer((set, get) => ({
+    stageWidth: 1000,
+    stageHeight: 600,
+
+    play: null,
+    editorMode: "select",
+    currentFrameIndex: 0,
+
+    currentFrame() {
+      const state = get();
+      if (!state.play) return null;
+      return state.play.frames[state.currentFrameIndex] ?? null;
     },
-    tokens,
-    frames: [frame],
-    arrowsById: {} as Record<string, Arrow>,
-    possession: ballToken.id,
-  }
-}
 
-export const usePlayStore = create<PlayStoreState>()(
-  immer((set) => ({
-    currentPlay: null,
-    activeFrameIndex: 0,
-    createEmptyPlay: (name: string) =>
-      set(() => ({
-        currentPlay: buildEmptyPlay(name),
-        activeFrameIndex: 0,
-      })),
-    setActiveFrameIndex: (index: number) =>
-      set((state) => {
-        if (!state.currentPlay) return
-        state.activeFrameIndex = Math.min(Math.max(index, 0), state.currentPlay.frames.length - 1)
-      }),
-    addFrame: () =>
-      set((state) => {
-        if (!state.currentPlay) return
-        const lastFrame = state.currentPlay.frames[state.currentPlay.frames.length - 1]
-        const newFrame: Frame = {
-          ...lastFrame,
+    setMode(mode) {
+      set((s) => {
+        s.editorMode = mode;
+      });
+    },
+
+    initDefaultPlay(name = "New Play") {
+      set((s) => {
+        const W = s.stageWidth;
+        const H = s.stageHeight;
+        const tokens = makeDefaultTokens();
+        const positions = defaultPositions(W, H);
+
+        const frame0: Frame = {
           id: nanoid(),
+          tokens: positions,
           arrows: [],
-          tokens: { ...lastFrame.tokens },
-        }
-        state.currentPlay.frames.push(newFrame)
-        state.activeFrameIndex = state.currentPlay.frames.length - 1
-        state.currentPlay.meta.updatedAt = new Date().toISOString()
-      }),
+        };
+
+        s.play = {
+          id: nanoid(),
+          meta: {
+            name,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          },
+          tokens,
+          frames: [frame0],
+          arrowsById: {},
+          possession: "P1",
+        };
+        s.currentFrameIndex = 0;
+        s.editorMode = "select";
+      });
+    },
+
+    setTokenPosition(tokenId, xy) {
+      set((s) => {
+        if (!s.play) return;
+        const frame = s.play.frames[s.currentFrameIndex];
+        if (!frame) return;
+        frame.tokens[tokenId] = { x: xy.x, y: xy.y };
+        s.play.meta.updatedAt = new Date().toISOString();
+      });
+    },
   }))
-)
+);
