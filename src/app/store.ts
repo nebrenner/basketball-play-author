@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
 import { nanoid } from "nanoid";
+import type Konva from "konva";
 import type { Play, Token, Frame, Id, XY, Arrow, ArrowKind, CourtType } from "./types";
 import { advanceFrame as computeNextFrame } from "../features/frames/frameEngine";
 import { runPlayStep } from "../features/frames/playback";
@@ -21,6 +22,7 @@ type StoreState = {
   snapToGrid: boolean;
   selectedTokenId: Id | null;
   selectedArrowId: Id | null;
+  stageRef: Konva.Stage | null;
 
   // playback
   isPlaying: boolean;
@@ -56,6 +58,9 @@ type StoreState = {
   stepForward: () => Promise<void>;
   playAnimation: () => Promise<void>;
   pauseAnimation: () => void;
+
+  // stage
+  setStageRef: (stage: Konva.Stage | null) => void;
 
   // persistence
   savePlay: () => void;
@@ -142,6 +147,7 @@ export const usePlayStore = create<StoreState>()(
     snapToGrid: true,
     selectedTokenId: null,
     selectedArrowId: null,
+    stageRef: null,
 
     // playback
     isPlaying: false,
@@ -523,6 +529,10 @@ export const usePlayStore = create<StoreState>()(
 
     pauseAnimation() {
       set((s) => { s.isPlaying = false; });
+    },
+
+    setStageRef(stage) {
+      set({ stageRef: stage });
     },
 
     // ---- Persistence (LocalStorage) ----

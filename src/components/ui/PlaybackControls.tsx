@@ -1,5 +1,6 @@
 import React from "react";
 import { usePlayStore } from "../../app/store";
+import { exportAnimationAsGif, exportCurrentFrameAsImage } from "../../features/export/exporters";
 
 const Btn: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement>> = ({ children, ...rest }) => (
   <button
@@ -25,6 +26,32 @@ const PlaybackControls: React.FC = () => {
   const step = usePlayStore((s) => s.stepForward);
   const speed = usePlayStore((s) => s.speed);
   const setSpeed = usePlayStore((s) => s.setSpeed);
+  const canExport = usePlayStore((s) => Boolean(s.stageRef && s.play && s.play.frames.length > 0));
+  const [pending, setPending] = React.useState<null | "image" | "animation">(null);
+
+  const handleExportImage = React.useCallback(async () => {
+    if (pending) return;
+    setPending("image");
+    try {
+      await exportCurrentFrameAsImage();
+    } catch (error) {
+      console.error("Failed to export image", error);
+    } finally {
+      setPending(null);
+    }
+  }, [pending]);
+
+  const handleExportAnimation = React.useCallback(async () => {
+    if (pending) return;
+    setPending("animation");
+    try {
+      await exportAnimationAsGif();
+    } catch (error) {
+      console.error("Failed to export animation", error);
+    } finally {
+      setPending(null);
+    }
+  }, [pending]);
   const canStep = usePlayStore((s) => {
     const p = s.play;
     const i = s.currentFrameIndex;
@@ -55,6 +82,22 @@ const PlaybackControls: React.FC = () => {
           <option value={2}>2×</option>
         </select>
       </label>
+
+      <Btn
+        onClick={handleExportImage}
+        disabled={!canExport || pending !== null}
+        title="Download the current frame as a PNG"
+      >
+        Export Image
+      </Btn>
+
+      <Btn
+        onClick={handleExportAnimation}
+        disabled={!canExport || pending !== null}
+        title="Download all frames as an animated GIF"
+      >
+        Export Animation
+      </Btn>
     </div>
   );
 };
