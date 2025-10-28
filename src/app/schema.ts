@@ -5,6 +5,7 @@ export const IdSchema = z.string().min(1);
 
 export const PlayerKindSchema = z.enum(["P1","P2","P3","P4","P5","BALL"]);
 export const ArrowKindSchema = z.enum(["cut","dribble","screen","pass"]);
+export const CourtTypeSchema = z.enum(["half", "full"]);
 
 export const TokenSchema = z.object({
   id: IdSchema,
@@ -39,6 +40,7 @@ export const PlaySchema = z.object({
   frames: z.array(FrameSchema).min(1),
   arrowsById: z.record(IdSchema, ArrowSchema),
   possession: IdSchema.optional(),
+  courtType: CourtTypeSchema.optional().default("half"),
 });
 
 export type PlayDTO = z.infer<typeof PlaySchema>;

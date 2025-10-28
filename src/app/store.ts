@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
 import { nanoid } from "nanoid";
-import type { Play, Token, Frame, Id, XY, Arrow, ArrowKind } from "./types";
+import type { Play, Token, Frame, Id, XY, Arrow, ArrowKind, CourtType } from "./types";
 import { advanceFrame as computeNextFrame } from "../features/frames/frameEngine";
 import { runPlayStep } from "../features/frames/playback";
 import { PlaySchema } from "./schema";
@@ -26,6 +26,7 @@ type DraftArrow =
 type StoreState = {
   stageWidth: number;
   stageHeight: number;
+  courtType: CourtType;
 
   play: Play | null;
   editorMode: EditorMode;
@@ -45,6 +46,7 @@ type StoreState = {
   // editor actions
   setMode: (mode: EditorMode) => void;
   setSnap: (value: boolean) => void;
+  setCourtType: (type: CourtType) => void;
   initDefaultPlay: (name?: string) => void;
   setTokenPosition: (tokenId: Id, xy: XY) => void;
 
@@ -81,14 +83,28 @@ const makeDefaultTokens = (): Token[] => [
   { id: "BALL", kind: "BALL", label: "●" },
 ];
 
-const defaultPositions = (W: number, H: number): Record<Id, XY> => ({
-  P1: { x: W * 0.20, y: H * 0.60 },
-  P2: { x: W * 0.35, y: H * 0.40 },
-  P3: { x: W * 0.50, y: H * 0.30 },
-  P4: { x: W * 0.65, y: H * 0.50 },
-  P5: { x: W * 0.80, y: H * 0.60 },
-  BALL: { x: W * 0.20, y: H * 0.60 },
-});
+const defaultPositions = (W: number, H: number, courtType: CourtType): Record<Id, XY> => {
+  if (courtType === "full") {
+    const full = {
+      P1: { x: W * 0.18, y: H * 0.50 },
+      P2: { x: W * 0.35, y: H * 0.32 },
+      P3: { x: W * 0.35, y: H * 0.68 },
+      P4: { x: W * 0.60, y: H * 0.40 },
+      P5: { x: W * 0.78, y: H * 0.62 },
+    } as Record<Id, XY>;
+    return { ...full, BALL: { ...full.P1 } };
+  }
+
+  const half = {
+    P1: { x: W * 0.48, y: H * 0.50 },
+    P2: { x: W * 0.40, y: H * 0.32 },
+    P3: { x: W * 0.40, y: H * 0.68 },
+    P4: { x: W * 0.64, y: H * 0.42 },
+    P5: { x: W * 0.72, y: H * 0.58 },
+  } as Record<Id, XY>;
+
+  return { ...half, BALL: { ...half.P1 } };
+};
 
 const snap = (xy: XY, enabled: boolean, grid = 10): XY =>
   enabled ? { x: Math.round(xy.x / grid) * grid, y: Math.round(xy.y / grid) * grid } : xy;
@@ -100,6 +116,7 @@ export const usePlayStore = create<StoreState>()(
   immer((set, get) => ({
     stageWidth: 1000,
     stageHeight: 600,
+    courtType: "half",
 
     play: null,
     editorMode: "select",
@@ -130,12 +147,26 @@ export const usePlayStore = create<StoreState>()(
       set((s) => { s.snapToGrid = value; });
     },
 
+    setCourtType(type) {
+      set((s) => {
+        if (s.courtType === type) return;
+        s.courtType = type;
+        if (s.play) {
+          s.play.courtType = type;
+          if (s.play.frames.length === 1) {
+            s.play.frames[0].tokens = defaultPositions(s.stageWidth, s.stageHeight, type);
+          }
+          s.play.meta.updatedAt = new Date().toISOString();
+        }
+      });
+    },
+
     initDefaultPlay(name = "New Play") {
       set((s) => {
         const W = s.stageWidth;
         const H = s.stageHeight;
         const tokens = makeDefaultTokens();
-        const positions = defaultPositions(W, H);
+        const positions = defaultPositions(W, H, s.courtType);
 
         const frame0: Frame = { id: nanoid(), tokens: positions, arrows: [] };
 
@@ -150,6 +181,7 @@ export const usePlayStore = create<StoreState>()(
           frames: [frame0],
           arrowsById: {},
           possession: "P1",
+          courtType: s.courtType,
         };
         s.currentFrameIndex = 0;
         s.editorMode = "select";
@@ -347,6 +379,7 @@ export const usePlayStore = create<StoreState>()(
           s.currentFrameIndex = 0;
           s.editorMode = "select";
           s.draftArrow = { active: false };
+          s.courtType = parsed.courtType ?? "half";
         });
         return true;
       } catch (e) {
