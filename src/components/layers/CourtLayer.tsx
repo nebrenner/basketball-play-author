@@ -42,10 +42,9 @@ const CourtLayer: React.FC = () => {
   const laneHeight = courtHeight * 0.32;
   const laneTop = centerY - laneHeight / 2;
   const freeThrowRadius = courtHeight * 0.12;
-  const restrictedRadius = courtHeight * 0.08;
   const rimOffset = laneDepth * 0.28;
   const boardOffset = laneDepth * 0.18;
-  const rimRadius = 8;
+  const rimRadius = 11;
   const threePointRadius = courtHeight * 0.475;
   const threePointBreak = courtWidth * 0.15;
 
@@ -116,16 +115,6 @@ const CourtLayer: React.FC = () => {
           strokeWidth={2}
           dash={[10, 6]}
         />
-        <Arc
-          x={rimX}
-          y={centerY}
-          innerRadius={restrictedRadius - 1}
-          outerRadius={restrictedRadius + 1}
-          angle={180}
-          rotation={side === "left" ? 90 : -90}
-          stroke={lineColor}
-          strokeWidth={2}
-        />
         {dashPositions.map((y) => (
           <React.Fragment key={`${side}-dash-${y}`}>
             <Line
@@ -185,39 +174,40 @@ const CourtLayer: React.FC = () => {
 
   const renderHalfCourt = () => {
     const baselineY = top;
-    const laneWidthHalf = courtWidth * 0.32;
+    const laneWidthHalf = courtWidth * 0.26;
     const laneLeft = centerX - laneWidthHalf / 2;
-    const laneLength = courtWidth * 0.19;
+    const laneLength = courtHeight * 0.65;
     const freeThrowLineY = baselineY + laneLength;
-    const rimY = baselineY + laneLength * 0.28;
-    const boardY = baselineY + laneLength * 0.18;
-    const freeThrowRadiusHalf = courtWidth * 0.12;
-    const restrictedRadiusHalf = courtWidth * 0.08;
-    const threePointRadiusHalf = courtWidth * 0.475;
-    const threePointBreakHalf = courtWidth * 0.28;
+    const rimY = baselineY + courtWidth * 0.06;
+    const boardY = baselineY + courtWidth * 0.045;
+    const boardWidth = courtWidth*0.1;
+    const freeThrowRadiusHalf = laneWidthHalf * 0.5;
+    const verticalDashPositions = [0.5, 0.7, 0.9].map((ratio) => baselineY + laneLength * ratio);
+    const halfBlockWidth = laneWidthHalf * 0.06;
+    const halfBlockHeight = laneLength * 0.08;
+    const halfBlockOffset = laneLength * 0.3;
+    const blockYs = [
+      baselineY + halfBlockOffset - halfBlockHeight / 2
+    ];
+    const threePointRadiusHalf = courtWidth * 0.38;
+    const threePointCenterY = blockYs[0] + halfBlockHeight;
+    const leftThreeX = centerX - threePointRadiusHalf;
+    const rightThreeX = centerX + threePointRadiusHalf;
 
-    const breakY = baselineY + threePointBreakHalf;
-    const sinTheta = clamp((breakY - rimY) / threePointRadiusHalf, -1, 1);
-    const theta = Math.asin(sinTheta);
-    const cornerXOffset = Math.cos(theta) * threePointRadiusHalf;
-    const leftThreeX = centerX - cornerXOffset;
-    const rightThreeX = centerX + cornerXOffset;
+    const startAngle = Math.PI;
+    const endAngle = 0;
+
     const threePointArcPoints = makeArcPoints(
       centerX,
-      rimY,
+      threePointCenterY,
       threePointRadiusHalf,
-      Math.PI / 2 - theta,
-      Math.PI / 2 + theta,
+      startAngle,
+      endAngle
     );
-
-    const verticalDashPositions = [0.32, 0.5, 0.68].map((ratio) => baselineY + laneLength * ratio);
-    const halfBlockWidth = laneWidthHalf * 0.12;
-    const halfBlockHeight = laneLength * 0.12;
-    const halfBlockOffset = laneLength * 0.18;
-    const blockYs = [
-      baselineY + halfBlockOffset - halfBlockHeight / 2,
-      baselineY + laneLength - halfBlockOffset - halfBlockHeight / 2,
-    ];
+    //const breakY = baselineY + threePointBreakHalf;
+    //const sinTheta = clamp((breakY - rimY) / threePointRadiusHalf, -1, 1);
+    //const theta = Math.asin(sinTheta);
+    //const cornerXOffset = Math.cos(theta) * threePointRadiusHalf;
 
     return (
       <Group>
@@ -242,33 +232,26 @@ const CourtLayer: React.FC = () => {
           x={centerX}
           y={freeThrowLineY}
           innerRadius={freeThrowRadiusHalf - 1}
-          outerRadius={freeThrowRadiusHalf + 1}
+          outerRadius={0}
           angle={180}
           rotation={180}
           stroke={lineColor}
           strokeWidth={2}
+          dash={[10, 10]}
         />
         <Arc
           x={centerX}
           y={freeThrowLineY}
           innerRadius={freeThrowRadiusHalf - 1}
-          outerRadius={freeThrowRadiusHalf + 1}
+          outerRadius={0}
           angle={180}
           rotation={0}
           stroke={lineColor}
           strokeWidth={2}
-          dash={[10, 6]}
         />
-        <Arc
-          x={centerX}
-          y={rimY}
-          innerRadius={restrictedRadiusHalf - 1}
-          outerRadius={restrictedRadiusHalf + 1}
-          angle={180}
-          rotation={180}
-          stroke={lineColor}
-          strokeWidth={2}
-        />
+        <Line points={threePointArcPoints} stroke={lineColor} strokeWidth={2} closed={false} lineCap="round" />
+        <Line points={[leftThreeX, baselineY, leftThreeX, threePointCenterY]} stroke={lineColor} strokeWidth={2} />
+        <Line points={[rightThreeX, baselineY, rightThreeX, threePointCenterY]} stroke={lineColor} strokeWidth={2} />
         {verticalDashPositions.map((y) => (
           <React.Fragment key={`half-dash-${y}`}>
             <Line
@@ -306,15 +289,12 @@ const CourtLayer: React.FC = () => {
           </React.Fragment>
         ))}
         <Line
-          points={[centerX - 22, boardY, centerX + 22, boardY]}
+          points={[centerX - boardWidth/2, boardY, centerX + boardWidth/2, boardY]}
           stroke={lineColor}
           strokeWidth={3}
         />
         <Line points={[centerX, boardY, centerX, rimY - rimRadius]} stroke={lineColor} strokeWidth={2} />
         <Circle x={centerX} y={rimY} radius={rimRadius} stroke={lineColor} strokeWidth={3} fill="#d97706" />
-        <Line points={[leftThreeX, baselineY, leftThreeX, breakY]} stroke={lineColor} strokeWidth={2} />
-        <Line points={[rightThreeX, baselineY, rightThreeX, breakY]} stroke={lineColor} strokeWidth={2} />
-        <Line points={threePointArcPoints} stroke={lineColor} strokeWidth={2} />
       </Group>
     );
   };
