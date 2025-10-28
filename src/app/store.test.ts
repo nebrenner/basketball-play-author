@@ -6,8 +6,6 @@ describe("usePlayStore", () => {
     usePlayStore.setState(() => ({
       play: null,
       currentFrameIndex: 0,
-      editorMode: "select",
-      draftArrow: { active: false },
       courtType: "half",
     }));
   });

@@ -73,14 +73,13 @@ const TokenLayer: React.FC = () => {
   const play = usePlayStore((s) => s.play);
   const curr = usePlayStore((s) => s.currentFrame());
   const setPos = usePlayStore((s) => s.setTokenPosition);
-  const mode = usePlayStore((s) => s.editorMode);
   const selectedTokenId = usePlayStore((s) => s.selectedTokenId);
   const setSelectedToken = usePlayStore((s) => s.setSelectedToken);
 
   if (!play || !curr) return null;
 
   const possessionId = play.possession ?? null;
-  const draggable = mode === "select";
+  const draggable = true;
 
   return (
     <Group>
