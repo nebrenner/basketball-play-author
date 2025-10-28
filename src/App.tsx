@@ -59,7 +59,7 @@ const App: React.FC = () => {
   return (
     <div className="app-root">
       <header className="app-header" style={{ display: "flex", alignItems: "center", padding: 8 }}>
-        <h1 style={{ margin: 0, fontSize: 16 }}>Basketball Play Author (MVP)</h1>
+        <h1 style={{ margin: 0, fontSize: 16 }}>Basketball Play Author</h1>
       </header>
 
       <div
