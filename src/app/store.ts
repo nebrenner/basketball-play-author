@@ -220,7 +220,7 @@ export const usePlayStore = create<StoreState>()(
 
         const id = nanoid();
         const startPoint = { x: start.x, y: start.y };
-        const defaultEnd = snap({ x: start.x + 100, y: start.y }, s.snapToGrid);
+        const defaultEnd = snap({ x: start.x + 200, y: start.y }, s.snapToGrid);
         const arrow: Arrow = {
           id,
           from: fromTokenId,
