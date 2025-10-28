@@ -1,8 +1,6 @@
 import React from "react";
-import { Group, Rect, Line, Circle, Arc } from "react-konva";
+import { Circle, Group, Line, Rect } from "react-konva";
 import { usePlayStore } from "../../app/store";
-
-const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 
 const makeArcPoints = (
   cx: number,
@@ -11,17 +9,23 @@ const makeArcPoints = (
   startAngle: number,
   endAngle: number,
   steps = 48,
-  dirX = 1,
-  dirY = 1,
 ) => {
   const pts: number[] = [];
   for (let i = 0; i <= steps; i += 1) {
     const t = startAngle + ((endAngle - startAngle) * i) / steps;
-    const cos = Math.cos(t);
-    const sin = Math.sin(t);
-    pts.push(cx + cos * radius * dirX, cy + sin * radius * dirY);
+    pts.push(cx + Math.cos(t) * radius, cy + Math.sin(t) * radius);
   }
   return pts;
+};
+
+const mirrorPoints = (points: number[], axisX: number) => {
+  const mirrored: number[] = [];
+  for (let i = 0; i < points.length; i += 2) {
+    const x = points[i];
+    const y = points[i + 1];
+    mirrored.push(2 * axisX - x, y);
+  }
+  return mirrored;
 };
 
 const CourtLayer: React.FC = () => {
@@ -29,8 +33,10 @@ const CourtLayer: React.FC = () => {
   const H = usePlayStore((s) => s.stageHeight);
   const courtType = usePlayStore((s) => s.courtType);
 
-  const padding = 20;
+  const padding = Math.min(W, H) * 0.04;
   const lineColor = "#bfa57a";
+  const surfaceColor = "#f3ead7";
+
   const courtWidth = W - padding * 2;
   const courtHeight = H - padding * 2;
   const left = padding;
@@ -39,311 +45,114 @@ const CourtLayer: React.FC = () => {
   const centerY = top + courtHeight / 2;
 
   const laneDepth = courtWidth * 0.19;
-  const laneHeight = courtHeight * 0.32;
-  const laneTop = centerY - laneHeight / 2;
-  const freeThrowRadius = courtHeight * 0.12;
-  const restrictedRadius = courtHeight * 0.08;
-  const rimOffset = laneDepth * 0.28;
-  const boardOffset = laneDepth * 0.18;
-  const rimRadius = 8;
-  const threePointRadius = courtHeight * 0.475;
-  const threePointBreak = courtWidth * 0.15;
+  const laneWidth = courtHeight * 0.32;
+  const laneTop = centerY - laneWidth / 2;
+  const freeThrowRadius = laneWidth * 0.35;
+  const rimOffset = laneDepth * 0.18;
+  const boardOffset = laneDepth * 0.1;
+  const hoopRadius = Math.min(courtWidth, courtHeight) * 0.014;
+  const boardLength = laneWidth * 0.45;
 
-  const laneMarkLength = laneDepth * 0.08;
-  const blockWidth = laneDepth * 0.08;
-  const blockHeight = laneHeight * 0.12;
-  const blockOffset = laneHeight * 0.18;
-  const dashPositions = [0.32, 0.5, 0.68].map((ratio) => laneTop + laneHeight * ratio);
+  const rimXLeft = left + rimOffset;
+  const rimXRight = left + courtWidth - rimOffset;
+  const freeThrowLineLeft = left + laneDepth;
+  const freeThrowLineRight = left + courtWidth - laneDepth;
 
-  const renderFullKey = (side: "left" | "right") => {
-    const baselineX = side === "left" ? left : left + courtWidth;
-    const interiorDir = side === "left" ? 1 : -1;
-    const laneX = side === "left" ? baselineX : baselineX - laneDepth;
-    const freeThrowLineX = baselineX + interiorDir * laneDepth;
-    const rimX = baselineX + interiorDir * rimOffset;
-    const boardX = baselineX + interiorDir * boardOffset;
+  const threePointRadius = Math.sqrt((laneDepth - rimOffset) ** 2 + freeThrowRadius ** 2);
+  const baselineDy = Math.sqrt(Math.max(threePointRadius ** 2 - rimOffset ** 2, 0));
+  const baselineAngle = Math.atan2(baselineDy, -rimOffset);
+  const threePointArcLeft = makeArcPoints(rimXLeft, centerY, threePointRadius, -baselineAngle, baselineAngle);
+  const threePointArcRight = mirrorPoints(threePointArcLeft, centerX);
 
-    const cornerDistance = threePointBreak - rimOffset;
-    const cosTheta = clamp(cornerDistance / threePointRadius, -1, 1);
-    const theta = Math.acos(cosTheta);
-    const cornerYOffset = Math.sin(theta) * threePointRadius;
-    const topY = centerY - cornerYOffset;
-    const bottomY = centerY + cornerYOffset;
+  const renderFullCourt = () => (
+    <>
+      <Line points={[centerX, top, centerX, top + courtHeight]} stroke={lineColor} strokeWidth={2} />
+      <Circle x={centerX} y={centerY} radius={courtHeight * 0.16} stroke={lineColor} strokeWidth={2} />
 
-    const threePointArcPoints = makeArcPoints(rimX, centerY, threePointRadius, -theta, theta, 48, interiorDir, 1);
-
-    const blockPositions = [
-      laneTop + blockOffset - blockHeight / 2,
-      laneTop + laneHeight - blockOffset - blockHeight / 2,
-    ];
-
-    return (
-      <Group key={side}>
+      <Group>
         <Rect
-          x={laneX}
+          x={left}
           y={laneTop}
           width={laneDepth}
-          height={laneHeight}
+          height={laneWidth}
           stroke={lineColor}
           strokeWidth={2}
-          cornerRadius={6}
-          fill="#f7e8c8"
-          opacity={0.8}
         />
+        <Circle x={freeThrowLineLeft} y={centerY} radius={freeThrowRadius} stroke={lineColor} strokeWidth={2} />
         <Line
-          points={[freeThrowLineX, laneTop, freeThrowLineX, laneTop + laneHeight]}
-          stroke={lineColor}
-          strokeWidth={2}
-        />
-        <Arc
-          x={freeThrowLineX}
-          y={centerY}
-          innerRadius={freeThrowRadius - 1}
-          outerRadius={freeThrowRadius + 1}
-          angle={180}
-          rotation={side === "left" ? 90 : -90}
-          stroke={lineColor}
-          strokeWidth={2}
-        />
-        <Arc
-          x={freeThrowLineX}
-          y={centerY}
-          innerRadius={freeThrowRadius - 1}
-          outerRadius={freeThrowRadius + 1}
-          angle={180}
-          rotation={side === "left" ? -90 : 90}
-          stroke={lineColor}
-          strokeWidth={2}
-          dash={[10, 6]}
-        />
-        <Arc
-          x={rimX}
-          y={centerY}
-          innerRadius={restrictedRadius - 1}
-          outerRadius={restrictedRadius + 1}
-          angle={180}
-          rotation={side === "left" ? 90 : -90}
-          stroke={lineColor}
-          strokeWidth={2}
-        />
-        {dashPositions.map((y) => (
-          <React.Fragment key={`${side}-dash-${y}`}>
-            <Line
-              points={[laneX - laneMarkLength, y, laneX, y]}
-              stroke={lineColor}
-              strokeWidth={2}
-            />
-            <Line
-              points={[laneX + laneDepth, y, laneX + laneDepth + laneMarkLength, y]}
-              stroke={lineColor}
-              strokeWidth={2}
-            />
-          </React.Fragment>
-        ))}
-        {blockPositions.map((blockY, idx) => (
-          <React.Fragment key={`${side}-block-${idx}`}>
-            <Rect
-              x={laneX - blockWidth}
-              y={blockY}
-              width={blockWidth}
-              height={blockHeight}
-              fill="#f7e8c8"
-              stroke={lineColor}
-              strokeWidth={2}
-            />
-            <Rect
-              x={laneX + laneDepth}
-              y={blockY}
-              width={blockWidth}
-              height={blockHeight}
-              fill="#f7e8c8"
-              stroke={lineColor}
-              strokeWidth={2}
-            />
-          </React.Fragment>
-        ))}
-        <Line
-          points={[boardX, centerY - 22, boardX, centerY + 22]}
+          points={[left + boardOffset, centerY - boardLength / 2, left + boardOffset, centerY + boardLength / 2]}
           stroke={lineColor}
           strokeWidth={3}
         />
-        <Line
-          points={[boardX, centerY, rimX - interiorDir * rimRadius, centerY]}
-          stroke={lineColor}
-          strokeWidth={2}
-        />
-        <Circle x={rimX} y={centerY} radius={rimRadius} stroke={lineColor} strokeWidth={3} fill="#d97706" />
-        <Line
-          points={[baselineX + interiorDir * threePointBreak, topY, baselineX + interiorDir * threePointBreak, bottomY]}
-          stroke={lineColor}
-          strokeWidth={2}
-        />
-        <Line points={threePointArcPoints} stroke={lineColor} strokeWidth={2} />
+        <Circle x={rimXLeft} y={centerY} radius={hoopRadius} stroke={lineColor} strokeWidth={2} fill="#d97706" />
+        <Line points={threePointArcLeft} stroke={lineColor} strokeWidth={2} />
       </Group>
-    );
-  };
+
+      <Group>
+        <Rect
+          x={left + courtWidth - laneDepth}
+          y={laneTop}
+          width={laneDepth}
+          height={laneWidth}
+          stroke={lineColor}
+          strokeWidth={2}
+        />
+        <Circle x={freeThrowLineRight} y={centerY} radius={freeThrowRadius} stroke={lineColor} strokeWidth={2} />
+        <Line
+          points={[
+            left + courtWidth - boardOffset,
+            centerY - boardLength / 2,
+            left + courtWidth - boardOffset,
+            centerY + boardLength / 2,
+          ]}
+          stroke={lineColor}
+          strokeWidth={3}
+        />
+        <Circle x={rimXRight} y={centerY} radius={hoopRadius} stroke={lineColor} strokeWidth={2} fill="#d97706" />
+        <Line points={threePointArcRight} stroke={lineColor} strokeWidth={2} />
+      </Group>
+    </>
+  );
 
   const renderHalfCourt = () => {
-    const baselineY = top;
     const laneWidthHalf = courtWidth * 0.32;
     const laneLeft = centerX - laneWidthHalf / 2;
-    const laneLength = courtWidth * 0.19;
-    const freeThrowLineY = baselineY + laneLength;
-    const rimY = baselineY + laneLength * 0.28;
-    const boardY = baselineY + laneLength * 0.18;
-    const freeThrowRadiusHalf = courtWidth * 0.12;
-    const restrictedRadiusHalf = courtWidth * 0.08;
-    const threePointRadiusHalf = courtWidth * 0.475;
-    const threePointBreakHalf = courtWidth * 0.28;
+    const laneLength = courtHeight * 0.4;
+    const rimOffsetHalf = laneLength * 0.18;
+    const boardOffsetHalf = laneLength * 0.1;
+    const freeThrowRadiusHalf = laneWidthHalf * 0.35;
+    const hoopRadiusHalf = hoopRadius;
+    const boardLengthHalf = laneWidthHalf * 0.45;
 
-    const breakY = baselineY + threePointBreakHalf;
-    const sinTheta = clamp((breakY - rimY) / threePointRadiusHalf, -1, 1);
-    const theta = Math.asin(sinTheta);
-    const cornerXOffset = Math.cos(theta) * threePointRadiusHalf;
-    const leftThreeX = centerX - cornerXOffset;
-    const rightThreeX = centerX + cornerXOffset;
-    const threePointArcPoints = makeArcPoints(
-      centerX,
-      rimY,
-      threePointRadiusHalf,
-      Math.PI / 2 - theta,
-      Math.PI / 2 + theta,
-    );
+    const rimY = top + rimOffsetHalf;
+    const boardY = top + boardOffsetHalf;
+    const freeThrowLineY = top + laneLength;
 
-    const verticalDashPositions = [0.32, 0.5, 0.68].map((ratio) => baselineY + laneLength * ratio);
-    const halfBlockWidth = laneWidthHalf * 0.12;
-    const halfBlockHeight = laneLength * 0.12;
-    const halfBlockOffset = laneLength * 0.18;
-    const blockYs = [
-      baselineY + halfBlockOffset - halfBlockHeight / 2,
-      baselineY + laneLength - halfBlockOffset - halfBlockHeight / 2,
-    ];
+    const threePointRadiusHalf = Math.abs(freeThrowLineY - freeThrowRadiusHalf - rimY);
+    const baselineHalfWidth = Math.sqrt(Math.max(threePointRadiusHalf ** 2 - rimOffsetHalf ** 2, 0));
+    const startAngle = Math.atan2(-rimOffsetHalf, -baselineHalfWidth);
+    const endAngle = Math.atan2(-rimOffsetHalf, baselineHalfWidth);
+    const threePointArcHalf = makeArcPoints(centerX, rimY, threePointRadiusHalf, startAngle, endAngle);
 
     return (
-      <Group>
-        <Line points={[left, baselineY, left + courtWidth, baselineY]} stroke={lineColor} strokeWidth={2} />
-        <Rect
-          x={laneLeft}
-          y={baselineY}
-          width={laneWidthHalf}
-          height={laneLength}
-          stroke={lineColor}
-          strokeWidth={2}
-          cornerRadius={6}
-          fill="#f7e8c8"
-          opacity={0.8}
-        />
+      <>
+        <Rect x={laneLeft} y={top} width={laneWidthHalf} height={laneLength} stroke={lineColor} strokeWidth={2} />
+        <Circle x={centerX} y={freeThrowLineY} radius={freeThrowRadiusHalf} stroke={lineColor} strokeWidth={2} />
         <Line
-          points={[laneLeft, freeThrowLineY, laneLeft + laneWidthHalf, freeThrowLineY]}
-          stroke={lineColor}
-          strokeWidth={2}
-        />
-        <Arc
-          x={centerX}
-          y={freeThrowLineY}
-          innerRadius={freeThrowRadiusHalf - 1}
-          outerRadius={freeThrowRadiusHalf + 1}
-          angle={180}
-          rotation={180}
-          stroke={lineColor}
-          strokeWidth={2}
-        />
-        <Arc
-          x={centerX}
-          y={freeThrowLineY}
-          innerRadius={freeThrowRadiusHalf - 1}
-          outerRadius={freeThrowRadiusHalf + 1}
-          angle={180}
-          rotation={0}
-          stroke={lineColor}
-          strokeWidth={2}
-          dash={[10, 6]}
-        />
-        <Arc
-          x={centerX}
-          y={rimY}
-          innerRadius={restrictedRadiusHalf - 1}
-          outerRadius={restrictedRadiusHalf + 1}
-          angle={180}
-          rotation={180}
-          stroke={lineColor}
-          strokeWidth={2}
-        />
-        {verticalDashPositions.map((y) => (
-          <React.Fragment key={`half-dash-${y}`}>
-            <Line
-              points={[laneLeft - laneMarkLength, y, laneLeft, y]}
-              stroke={lineColor}
-              strokeWidth={2}
-            />
-            <Line
-              points={[laneLeft + laneWidthHalf, y, laneLeft + laneWidthHalf + laneMarkLength, y]}
-              stroke={lineColor}
-              strokeWidth={2}
-            />
-          </React.Fragment>
-        ))}
-        {blockYs.map((blockY, idx) => (
-          <React.Fragment key={`half-block-${idx}`}>
-            <Rect
-              x={laneLeft - halfBlockWidth}
-              y={blockY}
-              width={halfBlockWidth}
-              height={halfBlockHeight}
-              fill="#f7e8c8"
-              stroke={lineColor}
-              strokeWidth={2}
-            />
-            <Rect
-              x={laneLeft + laneWidthHalf}
-              y={blockY}
-              width={halfBlockWidth}
-              height={halfBlockHeight}
-              fill="#f7e8c8"
-              stroke={lineColor}
-              strokeWidth={2}
-            />
-          </React.Fragment>
-        ))}
-        <Line
-          points={[centerX - 22, boardY, centerX + 22, boardY]}
+          points={[centerX - boardLengthHalf / 2, boardY, centerX + boardLengthHalf / 2, boardY]}
           stroke={lineColor}
           strokeWidth={3}
         />
-        <Line points={[centerX, boardY, centerX, rimY - rimRadius]} stroke={lineColor} strokeWidth={2} />
-        <Circle x={centerX} y={rimY} radius={rimRadius} stroke={lineColor} strokeWidth={3} fill="#d97706" />
-        <Line points={[leftThreeX, baselineY, leftThreeX, breakY]} stroke={lineColor} strokeWidth={2} />
-        <Line points={[rightThreeX, baselineY, rightThreeX, breakY]} stroke={lineColor} strokeWidth={2} />
-        <Line points={threePointArcPoints} stroke={lineColor} strokeWidth={2} />
-      </Group>
+        <Circle x={centerX} y={rimY} radius={hoopRadiusHalf} stroke={lineColor} strokeWidth={2} fill="#d97706" />
+        <Line points={threePointArcHalf} stroke={lineColor} strokeWidth={2} />
+      </>
     );
   };
 
   return (
     <Group listening={false}>
-      <Rect
-        x={left}
-        y={top}
-        width={courtWidth}
-        height={courtHeight}
-        stroke="#c5a880"
-        strokeWidth={4}
-        cornerRadius={8}
-        fillLinearGradientStartPoint={{ x: 0, y: 0 }}
-        fillLinearGradientEndPoint={{ x: 0, y: H }}
-        fillLinearGradientColorStops={[0, "#f7f0e1", 1, "#f3ead7"]}
-      />
-
-      {courtType === "full" ? (
-        <>
-          <Line points={[W / 2, top, W / 2, top + courtHeight]} stroke={lineColor} strokeWidth={2} />
-          <Circle x={W / 2} y={centerY} radius={courtHeight * 0.18} stroke={lineColor} strokeWidth={2} />
-          {renderFullKey("left")}
-          {renderFullKey("right")}
-        </>
-      ) : (
-        renderHalfCourt()
-      )}
+      <Rect x={left} y={top} width={courtWidth} height={courtHeight} stroke="#c5a880" strokeWidth={4} fill={surfaceColor} />
+      {courtType === "full" ? renderFullCourt() : renderHalfCourt()}
     </Group>
   );
 };
