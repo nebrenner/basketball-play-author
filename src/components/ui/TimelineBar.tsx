@@ -26,12 +26,24 @@ const TimelineBar: React.FC = () => {
 
   const total = play?.frames.length ?? 0;
   if (!play) return null;
+  const atFirst = idx <= 0;
+  const atLast = idx >= total - 1;
 
   return (
     <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-      <Btn onClick={() => setIndex(Math.max(0, idx - 1))} disabled={idx <= 0}>◀ Prev</Btn>
+      <Btn onClick={() => setIndex(0)} disabled={atFirst} title="Jump to first frame">
+        ⏮ First
+      </Btn>
+      <Btn onClick={() => setIndex(Math.max(0, idx - 1))} disabled={atFirst}>
+        ◀ Prev
+      </Btn>
       <div style={{ color: "#cbd5e1", fontSize: 13 }}>Frame {idx + 1} / {total}</div>
-      <Btn onClick={() => setIndex(Math.min(total - 1, idx + 1))} disabled={idx >= total - 1}>Next ▶</Btn>
+      <Btn onClick={() => setIndex(Math.min(total - 1, idx + 1))} disabled={atLast}>
+        Next ▶
+      </Btn>
+      <Btn onClick={() => setIndex(Math.max(0, total - 1))} disabled={atLast} title="Jump to last frame">
+        Last ⏭
+      </Btn>
 
       <div style={{ flex: 1 }} />
       <Btn onClick={deleteLast} disabled={total <= 1} title="Delete last frame (keeps at least 1)">Delete Last</Btn>

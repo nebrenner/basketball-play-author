@@ -10,11 +10,17 @@ const App: React.FC = () => {
   const play = usePlayStore((s) => s.play);
   const init = usePlayStore((s) => s.initDefaultPlay);
   const save = usePlayStore((s) => s.savePlay);
+  const saveCopy = usePlayStore((s) => s.savePlayAsCopy);
   const list = usePlayStore((s) => s.listLocalPlays);
   const load = usePlayStore((s) => s.loadPlay);
   const setPlayName = usePlayStore((s) => s.setPlayName);
   const deletePlay = usePlayStore((s) => s.deletePlay);
-  const plays = list();
+  const storageRevision = usePlayStore((s) => s.storageRevision);
+  const [plays, setPlays] = React.useState(() => list());
+
+  React.useEffect(() => {
+    setPlays(list());
+  }, [list, storageRevision]);
   const [selectedPlayId, setSelectedPlayId] = React.useState<string>("");
 
   React.useEffect(() => {
@@ -31,6 +37,10 @@ const App: React.FC = () => {
   const handleSave = React.useCallback(() => {
     save();
   }, [save]);
+
+  const handleSaveCopy = React.useCallback(() => {
+    saveCopy();
+  }, [saveCopy]);
 
   const handleLoad = React.useCallback(() => {
     if (!selectedPlayId) return;
@@ -87,6 +97,18 @@ const App: React.FC = () => {
             }}
           >
             Save
+          </button>
+          <button
+            onClick={handleSaveCopy}
+            style={{
+              padding: "6px 10px",
+              borderRadius: 8,
+              border: "1px solid #374151",
+              background: "#0b1220",
+              color: "#e5e7eb",
+            }}
+          >
+            Save Copy
           </button>
           <select
             value={selectedPlayId}
