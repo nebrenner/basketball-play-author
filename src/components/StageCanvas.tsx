@@ -66,7 +66,7 @@ const StageCanvas: React.FC = () => {
   const allowedArrowKinds = React.useMemo<ArrowKind[]>(() => {
     if (!play || !selectedTokenId) return [];
     const token = play.tokens.find((t) => t.id === selectedTokenId);
-    if (!token || token.kind === "BALL") return [];
+    if (!token) return [];
     const hasBall = play.possession === selectedTokenId;
     return hasBall ? ["dribble", "pass"] : ["cut", "screen"];
   }, [play, selectedTokenId]);

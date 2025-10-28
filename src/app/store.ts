@@ -4,6 +4,7 @@ import { nanoid } from "nanoid";
 import type { Play, Token, Frame, Id, XY, Arrow, ArrowKind, CourtType } from "./types";
 import { advanceFrame as computeNextFrame } from "../features/frames/frameEngine";
 import { runPlayStep } from "../features/frames/playback";
+import { ballPositionFor } from "../features/tokens/tokenGeometry";
 import { PlaySchema } from "./schema";
 
 type StoreState = {
@@ -62,30 +63,26 @@ const makeDefaultTokens = (): Token[] => [
   { id: "P3", kind: "P3", label: "3" },
   { id: "P4", kind: "P4", label: "4" },
   { id: "P5", kind: "P5", label: "5" },
-  { id: "BALL", kind: "BALL", label: "●" },
 ];
 
 const defaultPositions = (W: number, H: number, courtType: CourtType): Record<Id, XY> => {
   if (courtType === "full") {
-    const full = {
+    return {
       P1: { x: W * 0.18, y: H * 0.50 },
       P2: { x: W * 0.35, y: H * 0.32 },
       P3: { x: W * 0.35, y: H * 0.68 },
       P4: { x: W * 0.60, y: H * 0.40 },
       P5: { x: W * 0.78, y: H * 0.62 },
     } as Record<Id, XY>;
-    return { ...full, BALL: { ...full.P1 } };
   }
 
-  const half = {
+  return {
     P1: { x: W * 0.48, y: H * 0.50 },
     P2: { x: W * 0.40, y: H * 0.32 },
     P3: { x: W * 0.40, y: H * 0.68 },
     P4: { x: W * 0.64, y: H * 0.42 },
     P5: { x: W * 0.72, y: H * 0.58 },
   } as Record<Id, XY>;
-
-  return { ...half, BALL: { ...half.P1 } };
 };
 
 const snap = (xy: XY, enabled: boolean, grid = 10): XY =>
@@ -128,7 +125,9 @@ export const usePlayStore = create<StoreState>()(
         if (s.play) {
           s.play.courtType = type;
           if (s.play.frames.length === 1) {
-            s.play.frames[0].tokens = defaultPositions(s.stageWidth, s.stageHeight, type);
+            const frame = s.play.frames[0];
+            frame.tokens = defaultPositions(s.stageWidth, s.stageHeight, type);
+            frame.possession = frame.possession ?? s.play.possession;
           }
           s.play.meta.updatedAt = new Date().toISOString();
         }
@@ -142,7 +141,7 @@ export const usePlayStore = create<StoreState>()(
         const tokens = makeDefaultTokens();
         const positions = defaultPositions(W, H, s.courtType);
 
-        const frame0: Frame = { id: nanoid(), tokens: positions, arrows: [] };
+        const frame0: Frame = { id: nanoid(), tokens: positions, arrows: [], possession: "P1" };
 
         s.play = {
           id: nanoid(),
@@ -194,11 +193,10 @@ export const usePlayStore = create<StoreState>()(
     setPossession(id) {
       set((s) => {
         if (!s.play) return;
-        if (!id) {
-          s.play.possession = undefined;
-        } else {
-          s.play.possession = id;
-        }
+        const frame = s.play.frames[s.currentFrameIndex];
+        if (!frame) return;
+        s.play.possession = id ?? undefined;
+        frame.possession = id ?? undefined;
         s.play.meta.updatedAt = new Date().toISOString();
       });
     },
@@ -283,6 +281,7 @@ export const usePlayStore = create<StoreState>()(
         if (!next) return;
         s.play.frames.push(next);
         s.currentFrameIndex = s.play.frames.length - 1;
+        s.play.possession = next.possession ?? undefined;
         s.play.meta.updatedAt = new Date().toISOString();
         s.play.frames[s.currentFrameIndex].arrows = [];
       });
@@ -293,6 +292,10 @@ export const usePlayStore = create<StoreState>()(
         if (!s.play) return;
         const clamped = Math.max(0, Math.min(i, s.play.frames.length - 1));
         s.currentFrameIndex = clamped;
+        const frame = s.play.frames[clamped];
+        if (frame) {
+          s.play.possession = frame.possession ?? undefined;
+        }
       });
     },
 
@@ -302,6 +305,10 @@ export const usePlayStore = create<StoreState>()(
         if (s.play.frames.length <= 1) return;
         s.play.frames.pop();
         s.currentFrameIndex = Math.min(s.currentFrameIndex, s.play.frames.length - 1);
+        const frame = s.play.frames[s.currentFrameIndex];
+        if (frame) {
+          s.play.possession = frame.possession ?? undefined;
+        }
         s.play.meta.updatedAt = new Date().toISOString();
       });
     },
@@ -330,8 +337,32 @@ export const usePlayStore = create<StoreState>()(
         return [{ id, from: a, to: b }];
       });
 
-      await runPlayStep({ moves, durationMs });
-      set((st) => { st.currentFrameIndex = next; });
+      const fromPossessionId = from.possession ?? s.play.possession ?? null;
+      const toPossessionId = to.possession ?? fromPossessionId;
+      let ballMove: { from: XY; to: XY } | null = null;
+
+      if (fromPossessionId) {
+        const fromPos = from.tokens[fromPossessionId];
+        const toPos = toPossessionId ? to.tokens[toPossessionId] : undefined;
+        if (fromPos && toPos) {
+          const start = ballPositionFor(fromPos);
+          const end = ballPositionFor(toPos);
+          if (start.x !== end.x || start.y !== end.y) {
+            ballMove = { from: start, to: end };
+          }
+        }
+      }
+
+      await runPlayStep({ moves, durationMs, ballMove });
+      set((st) => {
+        st.currentFrameIndex = next;
+        if (st.play) {
+          const frame = st.play.frames[next];
+          if (frame) {
+            st.play.possession = frame.possession ?? undefined;
+          }
+        }
+      });
     },
 
     async playAnimation() {
@@ -393,6 +424,8 @@ export const usePlayStore = create<StoreState>()(
           s.courtType = parsed.courtType ?? "half";
           s.selectedTokenId = null;
           s.selectedArrowId = null;
+          const firstFrame = parsed.frames[0];
+          s.play.possession = firstFrame?.possession ?? parsed.possession;
         });
         return true;
       } catch (e) {

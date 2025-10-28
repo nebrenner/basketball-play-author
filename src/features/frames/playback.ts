@@ -5,6 +5,7 @@ import type { Id, XY } from "../../app/types";
 export type PlayStepSpec = {
   moves: Array<{ id: Id; from: XY; to: XY }>;
   durationMs: number;
+  ballMove?: { from: XY; to: XY } | null;
 };
 
 export function tweenMove(id: Id, from: XY, to: XY, durationMs: number): Promise<void> {
@@ -29,5 +30,8 @@ export function tweenMove(id: Id, from: XY, to: XY, durationMs: number): Promise
 // Run a play step: tween all moved tokens concurrently, then resolve.
 export async function runPlayStep(spec: PlayStepSpec): Promise<void> {
   const promises = spec.moves.map((m) => tweenMove(m.id, m.from, m.to, spec.durationMs));
+  if (spec.ballMove) {
+    promises.push(tweenMove("BALL", spec.ballMove.from, spec.ballMove.to, spec.durationMs));
+  }
   await Promise.all(promises);
 }

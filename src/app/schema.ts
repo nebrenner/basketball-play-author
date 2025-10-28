@@ -3,7 +3,7 @@ import { z } from "zod";
 export const XYSchema = z.object({ x: z.number(), y: z.number() });
 export const IdSchema = z.string().min(1);
 
-export const PlayerKindSchema = z.enum(["P1","P2","P3","P4","P5","BALL"]);
+export const PlayerKindSchema = z.enum(["P1","P2","P3","P4","P5"]);
 export const ArrowKindSchema = z.enum(["cut","dribble","screen","pass"]);
 export const CourtTypeSchema = z.enum(["half", "full"]);
 
@@ -18,6 +18,7 @@ export const FrameSchema = z.object({
   tokens: z.record(IdSchema, XYSchema),
   arrows: z.array(IdSchema),
   note: z.string().optional(),
+  possession: IdSchema.optional(),
 });
 
 export const ArrowSchema = z.object({
