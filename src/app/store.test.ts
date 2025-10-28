@@ -34,6 +34,36 @@ describe("usePlayStore", () => {
     expect(state.currentFrameIndex).toBe(1);
   });
 
+  it("captures pass targets and hands off possession on advance", () => {
+    const { initDefaultPlay } = usePlayStore.getState();
+
+    initDefaultPlay("Test Play");
+
+    const createArrow = usePlayStore.getState().createArrow;
+    createArrow("pass", "P1");
+
+    const stateAfterArrow = usePlayStore.getState();
+    const arrowId = stateAfterArrow.selectedArrowId;
+    expect(arrowId).not.toBeNull();
+    const frame = stateAfterArrow.play?.frames[stateAfterArrow.currentFrameIndex];
+    const targetPos = frame?.tokens.P2;
+    expect(targetPos).toBeDefined();
+
+    if (!arrowId || !targetPos) throw new Error("failed to create pass arrow");
+
+    usePlayStore.getState().updateArrowEndpoint(arrowId, targetPos);
+
+    const afterEndpoint = usePlayStore.getState();
+    expect(afterEndpoint.play?.arrowsById[arrowId]?.toTokenId).toBe("P2");
+
+    afterEndpoint.advanceFrame();
+
+    const afterAdvance = usePlayStore.getState();
+    expect(afterAdvance.play?.frames).toHaveLength(2);
+    const newFrame = afterAdvance.play?.frames[1];
+    expect(newFrame?.possession).toBe("P2");
+  });
+
   it("updates the default frame when switching court types", () => {
     const { initDefaultPlay } = usePlayStore.getState();
 
