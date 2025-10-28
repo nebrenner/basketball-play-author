@@ -18,7 +18,8 @@ describe("usePlayStore", () => {
 
     expect(state.play).not.toBeNull();
     expect(state.play?.frames).toHaveLength(1);
-    expect(Object.keys(state.play?.frames[0]?.tokens ?? {})).toHaveLength(6);
+    expect(Object.keys(state.play?.frames[0]?.tokens ?? {})).toHaveLength(5);
+    expect(state.play?.frames[0]?.possession).toBe("P1");
     expect(state.currentFrameIndex).toBe(0);
   });
 

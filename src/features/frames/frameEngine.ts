@@ -8,11 +8,16 @@ export function advanceFrame(play: Play, currentIndex: number): Frame | null {
   const curr = play.frames[currentIndex];
   if (!curr) return null;
 
+  const currPossession = curr.possession ?? play.possession;
+
   const next: Frame = {
     id: nanoid(),
     tokens: clonePositions(curr.tokens),
     arrows: [], // policy: new frame starts with no teaching arrows
+    possession: currPossession,
   };
+
+  let nextPossession: Id | undefined = currPossession;
 
   // Apply each arrow in this step to compute next positions
   for (const id of curr.arrows) {
@@ -20,25 +25,21 @@ export function advanceFrame(play: Play, currentIndex: number): Frame | null {
     if (!a) continue;
 
     if (a.kind === "pass") {
-      // move BALL to target point or token
-      if (a.toPoint) {
-        next.tokens["BALL"] = { x: a.toPoint.x, y: a.toPoint.y };
-      } else if (a.toTokenId) {
-        const toPos = next.tokens[a.toTokenId];
-        if (toPos) {
-          next.tokens["BALL"] = { x: toPos.x, y: toPos.y };
-        }
+      if (a.toTokenId && next.tokens[a.toTokenId]) {
+        nextPossession = a.toTokenId;
+      } else if (a.toPoint) {
+        nextPossession = undefined;
       }
-    } else {
-      // cut / dribble / screen move the source token to the endpoint
-      if (a.toPoint) {
-        next.tokens[a.from] = { x: a.toPoint.x, y: a.toPoint.y };
-        if (a.kind === "dribble" && play.possession === a.from) {
-          next.tokens["BALL"] = { x: a.toPoint.x, y: a.toPoint.y };
-        }
-      }
+      continue;
+    }
+
+    // cut / dribble / screen move the source token to the endpoint
+    if (a.toPoint) {
+      next.tokens[a.from] = { x: a.toPoint.x, y: a.toPoint.y };
     }
   }
+
+  next.possession = nextPossession;
 
   return next;
 }

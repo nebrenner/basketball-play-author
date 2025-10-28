@@ -1,7 +1,7 @@
 export type Id = string;
 export type XY = { x: number; y: number };
 
-export type PlayerKind = "P1" | "P2" | "P3" | "P4" | "P5" | "BALL";
+export type PlayerKind = "P1" | "P2" | "P3" | "P4" | "P5";
 export type ArrowKind = "cut" | "dribble" | "screen" | "pass";
 
 export type CourtType = "half" | "full";
@@ -17,6 +17,7 @@ export type Frame = {
   tokens: Record<Id, XY>; // token positions at this frame
   arrows: Id[]; // which arrows to render during this step
   note?: string;
+  possession?: Id;
 };
 
 export type Arrow = {

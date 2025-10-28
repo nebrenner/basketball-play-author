@@ -4,18 +4,18 @@ import type Konva from "konva";
 import { usePlayStore } from "../../app/store";
 import { registerTokenNode } from "../../features/tokens/tokenRegistry";
 import type { Id, Token, XY } from "../../app/types";
+import { BALL_RADIUS, TOKEN_RADIUS, ballPositionFor } from "../../features/tokens/tokenGeometry";
 
 type TokenNodeProps = {
   token: Token;
   position: XY;
-  possessionId: Id | null;
   onDragEnd: (tokenId: Id, xy: XY) => void;
   onSelect: (tokenId: Id) => void;
   isSelected: boolean;
   draggable: boolean;
 };
 
-const TokenNode: React.FC<TokenNodeProps> = ({ token, position, possessionId, onDragEnd, onSelect, isSelected, draggable }) => {
+const TokenNode: React.FC<TokenNodeProps> = ({ token, position, onDragEnd, onSelect, isSelected, draggable }) => {
   const ref = React.useRef<Konva.Group | null>(null);
 
   React.useEffect(() => {
@@ -23,9 +23,8 @@ const TokenNode: React.FC<TokenNodeProps> = ({ token, position, possessionId, on
     return () => registerTokenNode(token.id, null);
   }, [token.id]);
 
-  const radius = 18;
+  const radius = TOKEN_RADIUS;
   const fill = "#2d6cdf";
-  const hasBall = possessionId === token.id;
 
   return (
     <Group
@@ -68,17 +67,33 @@ const TokenNode: React.FC<TokenNodeProps> = ({ token, position, possessionId, on
         fill="#fff"
         fontStyle="bold"
       />
-      {hasBall && (
-        <Circle
-          radius={6}
-          x={radius * 0.85}
-          y={-radius * 0.85}
-          fill="#f59e0b"
-          stroke="#fef08a"
-          strokeWidth={1}
-        />
-      )}
     </Group>
+  );
+};
+
+const BallOverlay: React.FC<{ position: XY | null }> = ({ position }) => {
+  const ref = React.useRef<Konva.Circle | null>(null);
+
+  React.useEffect(() => {
+    registerTokenNode("BALL", ref.current);
+    return () => registerTokenNode("BALL", null);
+  }, []);
+
+  const point = position ? ballPositionFor(position) : null;
+
+  return (
+    <Circle
+      ref={ref}
+      radius={BALL_RADIUS}
+      x={point?.x ?? 0}
+      y={point?.y ?? 0}
+      visible={!!position}
+      fill="#f59e0b"
+      stroke="#fef08a"
+      strokeWidth={1}
+      shadowBlur={4}
+      listening={false}
+    />
   );
 };
 
@@ -91,13 +106,13 @@ const TokenLayer: React.FC = () => {
 
   if (!play || !curr) return null;
 
-  const possessionId = play.possession ?? null;
+  const possessionId = curr.possession ?? play.possession ?? null;
+  const ballPosition = possessionId ? curr.tokens[possessionId] ?? null : null;
   const draggable = true;
 
   return (
     <Group>
       {play.tokens.map((token) => {
-        if (token.kind === "BALL") return null;
         const position = curr.tokens[token.id];
         if (!position) return null;
         return (
@@ -105,7 +120,6 @@ const TokenLayer: React.FC = () => {
             key={token.id}
             token={token}
             position={position}
-            possessionId={possessionId}
             onDragEnd={setPos}
             onSelect={setSelectedToken}
             isSelected={selectedTokenId === token.id}
@@ -113,6 +127,7 @@ const TokenLayer: React.FC = () => {
           />
         );
       })}
+      <BallOverlay position={ballPosition} />
     </Group>
   );
 };
