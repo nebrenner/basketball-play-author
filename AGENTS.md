@@ -6,7 +6,8 @@
 - Keep styling lightweight; rely on utility classes defined in `src/main.css` when possible.
 - When adding Konva shapes, keep rendering logic declarative and avoid mutating nodes directly.
 - Organize new features within the existing folder structure (`app`, `components`, `features`, `pages`).
-- Tests are not yet configured; mention manual verification steps in summaries when relevant.
+- Run `npm run lint` to check code quality before submitting changes.
+- Run `npm test` to execute the Vitest suite; add or update tests alongside functional changes.
 
 ## PR Message Expectations
 - Summaries should highlight high-level changes (structure, store updates, UI scaffolding).
