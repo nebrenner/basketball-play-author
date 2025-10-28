@@ -1,7 +1,8 @@
 import React from "react";
 import { Group, Arrow as KArrow, Line } from "react-konva";
 import type { KonvaEventObject } from "konva/lib/Node";
-import { usePlayStore, EditorMode } from "../../app/store";
+import { usePlayStore } from "../../app/store";
+import type { EditorMode } from "../../app/store";
 import type { Id, XY, Arrow as ArrowType } from "../../app/types";
 import { styleFor } from "../../features/arrows/arrowStyles";
 

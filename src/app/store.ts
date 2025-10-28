@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
 import { nanoid } from "nanoid";
-import type { Play, Token, Frame, Id, XY, Arrow } from "./types";
+import type { Play, Token, Frame, Id, XY, Arrow, ArrowKind } from "./types";
 import { advanceFrame as computeNextFrame } from "../features/frames/frameEngine";
 import { runPlayStep } from "../features/frames/playback";
 import { PlaySchema } from "./schema";
@@ -17,7 +17,7 @@ export type EditorMode =
 type DraftArrow =
   | {
       active: true;
-      kind: "cut" | "dribble" | "screen" | "pass";
+      kind: ArrowKind;
       fromTokenId: Id;
       points: XY[];
     }
@@ -49,7 +49,7 @@ type StoreState = {
   setTokenPosition: (tokenId: Id, xy: XY) => void;
 
   // arrow authoring
-  beginArrow: (kind: DraftArrow["kind"], fromTokenId: Id, start: XY) => void;
+  beginArrow: (kind: ArrowKind, fromTokenId: Id, start: XY) => void;
   updateArrowPreview: (pt: XY) => void;
   commitArrowToPoint: (finalPoint: XY) => void;
   commitArrowToToken: (toTokenId: Id) => void;
