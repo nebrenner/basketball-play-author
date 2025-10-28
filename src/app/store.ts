@@ -3,6 +3,8 @@ import { immer } from "zustand/middleware/immer";
 import { nanoid } from "nanoid";
 import type { Play, Token, Frame, Id, XY, Arrow } from "./types";
 import { advanceFrame as computeNextFrame } from "../features/frames/frameEngine";
+import { runPlayStep } from "../features/frames/playback";
+import { PlaySchema } from "./schema";
 
 export type EditorMode =
   | "select"
@@ -17,12 +19,11 @@ type DraftArrow =
       active: true;
       kind: "cut" | "dribble" | "screen" | "pass";
       fromTokenId: Id;
-      points: XY[]; // first point is start (token center), last is current mouse
+      points: XY[];
     }
   | { active: false };
 
 type StoreState = {
-  // stage logical size
   stageWidth: number;
   stageHeight: number;
 
@@ -33,10 +34,15 @@ type StoreState = {
 
   draftArrow: DraftArrow;
 
+  // playback
+  isPlaying: boolean;
+  speed: number;
+  baseDurationMs: number;
+
   // selectors
   currentFrame(): Frame | null;
 
-  // actions
+  // editor actions
   setMode: (mode: EditorMode) => void;
   setSnap: (value: boolean) => void;
   initDefaultPlay: (name?: string) => void;
@@ -45,12 +51,25 @@ type StoreState = {
   // arrow authoring
   beginArrow: (kind: DraftArrow["kind"], fromTokenId: Id, start: XY) => void;
   updateArrowPreview: (pt: XY) => void;
-  commitArrowToPoint: (finalPoint: XY) => void; // cut/dribble/screen
-  commitArrowToToken: (toTokenId: Id) => void; // pass
+  commitArrowToPoint: (finalPoint: XY) => void;
+  commitArrowToToken: (toTokenId: Id) => void;
   cancelArrow: () => void;
 
   // frames
-  advanceFrame: () => void; // creates next frame from current + arrows
+  advanceFrame: () => void;
+  setCurrentFrameIndex: (i: number) => void;
+  deleteLastFrame: () => void;
+
+  // playback controls
+  setSpeed: (mult: number) => void;
+  stepForward: () => Promise<void>;
+  playAnimation: () => Promise<void>;
+  pauseAnimation: () => void;
+
+  // persistence
+  savePlay: () => void;
+  loadPlay: (id: string) => boolean;
+  listLocalPlays: () => Array<{ id: string; name: string; updatedAt: string }>;
 };
 
 const makeDefaultTokens = (): Token[] => [
@@ -63,16 +82,19 @@ const makeDefaultTokens = (): Token[] => [
 ];
 
 const defaultPositions = (W: number, H: number): Record<Id, XY> => ({
-  P1: { x: W * 0.2, y: H * 0.6 },
-  P2: { x: W * 0.35, y: H * 0.4 },
-  P3: { x: W * 0.5, y: H * 0.3 },
-  P4: { x: W * 0.65, y: H * 0.5 },
-  P5: { x: W * 0.8, y: H * 0.6 },
-  BALL: { x: W * 0.2, y: H * 0.6 },
+  P1: { x: W * 0.20, y: H * 0.60 },
+  P2: { x: W * 0.35, y: H * 0.40 },
+  P3: { x: W * 0.50, y: H * 0.30 },
+  P4: { x: W * 0.65, y: H * 0.50 },
+  P5: { x: W * 0.80, y: H * 0.60 },
+  BALL: { x: W * 0.20, y: H * 0.60 },
 });
 
 const snap = (xy: XY, enabled: boolean, grid = 10): XY =>
   enabled ? { x: Math.round(xy.x / grid) * grid, y: Math.round(xy.y / grid) * grid } : xy;
+
+function localKey(id: string) { return `bpa.play.${id}`; }
+function indexKey() { return `bpa.index`; }
 
 export const usePlayStore = create<StoreState>()(
   immer((set, get) => ({
@@ -85,6 +107,11 @@ export const usePlayStore = create<StoreState>()(
     snapToGrid: true,
 
     draftArrow: { active: false },
+
+    // playback
+    isPlaying: false,
+    speed: 1,
+    baseDurationMs: 900,
 
     currentFrame() {
       const state = get();
@@ -100,9 +127,7 @@ export const usePlayStore = create<StoreState>()(
     },
 
     setSnap(value) {
-      set((s) => {
-        s.snapToGrid = value;
-      });
+      set((s) => { s.snapToGrid = value; });
     },
 
     initDefaultPlay(name = "New Play") {
@@ -112,11 +137,7 @@ export const usePlayStore = create<StoreState>()(
         const tokens = makeDefaultTokens();
         const positions = defaultPositions(W, H);
 
-        const frame0: Frame = {
-          id: nanoid(),
-          tokens: positions,
-          arrows: [],
-        };
+        const frame0: Frame = { id: nanoid(), tokens: positions, arrows: [] };
 
         s.play = {
           id: nanoid(),
@@ -165,7 +186,7 @@ export const usePlayStore = create<StoreState>()(
       set((s) => {
         if (!s.play || !s.draftArrow.active) return;
         const { kind, fromTokenId, points } = s.draftArrow;
-        if (kind === "pass") return; // wrong commit function for pass
+        if (kind === "pass") return;
         const id = nanoid();
         const arrow: Arrow = {
           id,
@@ -176,10 +197,8 @@ export const usePlayStore = create<StoreState>()(
           points: [...points.slice(0, -1), finalPoint],
         };
         s.play.arrowsById[id] = arrow;
-
         const frame = s.play.frames[s.currentFrameIndex];
         frame.arrows.push(id);
-
         s.draftArrow = { active: false };
         s.play.meta.updatedAt = new Date().toISOString();
       });
@@ -189,7 +208,7 @@ export const usePlayStore = create<StoreState>()(
       set((s) => {
         if (!s.play || !s.draftArrow.active) return;
         const { kind, fromTokenId, points } = s.draftArrow;
-        if (kind !== "pass") return; // only for pass
+        if (kind !== "pass") return;
         const id = nanoid();
         const arrow: Arrow = {
           id,
@@ -200,19 +219,15 @@ export const usePlayStore = create<StoreState>()(
           points,
         };
         s.play.arrowsById[id] = arrow;
-
         const frame = s.play.frames[s.currentFrameIndex];
         frame.arrows.push(id);
-
         s.draftArrow = { active: false };
         s.play.meta.updatedAt = new Date().toISOString();
       });
     },
 
     cancelArrow() {
-      set((s) => {
-        s.draftArrow = { active: false };
-      });
+      set((s) => { s.draftArrow = { active: false }; });
     },
 
     // ---- Frames ----
@@ -224,10 +239,131 @@ export const usePlayStore = create<StoreState>()(
         s.play.frames.push(next);
         s.currentFrameIndex = s.play.frames.length - 1;
         s.play.meta.updatedAt = new Date().toISOString();
-
-        // policy: clear arrows in the new frame (teaching arrows are per-step)
         s.play.frames[s.currentFrameIndex].arrows = [];
       });
+    },
+
+    setCurrentFrameIndex(i) {
+      set((s) => {
+        if (!s.play) return;
+        const clamped = Math.max(0, Math.min(i, s.play.frames.length - 1));
+        s.currentFrameIndex = clamped;
+      });
+    },
+
+    deleteLastFrame() {
+      set((s) => {
+        if (!s.play) return;
+        if (s.play.frames.length <= 1) return;
+        s.play.frames.pop();
+        s.currentFrameIndex = Math.min(s.currentFrameIndex, s.play.frames.length - 1);
+        s.play.meta.updatedAt = new Date().toISOString();
+      });
+    },
+
+    // ---- Playback ----
+    setSpeed(mult) {
+      set((s) => { s.speed = Math.max(0.25, Math.min(mult, 4)); });
+    },
+
+    async stepForward() {
+      const s = get();
+      if (!s.play) return;
+      const i = s.currentFrameIndex;
+      const next = i + 1;
+      if (next >= s.play.frames.length) return;
+
+      const from = s.play.frames[i];
+      const to = s.play.frames[next];
+      const durationMs = s.baseDurationMs / s.speed;
+
+      const moves = Object.keys(to.tokens).flatMap((id) => {
+        const a = from.tokens[id];
+        const b = to.tokens[id];
+        if (!a || !b) return [];
+        if (a.x === b.x && a.y === b.y) return [];
+        return [{ id, from: a, to: b }];
+      });
+
+      await runPlayStep({ moves, durationMs });
+      set((st) => { st.currentFrameIndex = next; });
+    },
+
+    async playAnimation() {
+      if (get().isPlaying) return;
+      set((s) => { s.isPlaying = true; });
+
+      try {
+        while (get().isPlaying) {
+          const s = get();
+          if (!s.play) break;
+          if (s.currentFrameIndex >= s.play.frames.length - 1) {
+            set((st) => { st.isPlaying = false; });
+            break;
+          }
+          await get().stepForward();
+        }
+      } finally {
+        set((s) => { s.isPlaying = false; });
+      }
+    },
+
+    pauseAnimation() {
+      set((s) => { s.isPlaying = false; });
+    },
+
+    // ---- Persistence (LocalStorage) ----
+    savePlay() {
+      const s = get();
+      const p = s.play;
+      if (!p) return;
+      const parsed = PlaySchema.safeParse(p);
+      if (!parsed.success) {
+        console.error("Save failed: invalid play", parsed.error);
+        return;
+      }
+      localStorage.setItem(localKey(p.id), JSON.stringify(parsed.data));
+      const idxRaw = localStorage.getItem(indexKey());
+      const idx = idxRaw ? JSON.parse(idxRaw) as Array<{ id:string; name:string; updatedAt:string }> : [];
+      const existing = idx.find((x) => x.id === p.id);
+      if (existing) {
+        existing.name = p.meta.name;
+        existing.updatedAt = p.meta.updatedAt;
+      } else {
+        idx.push({ id: p.id, name: p.meta.name, updatedAt: p.meta.updatedAt });
+      }
+      localStorage.setItem(indexKey(), JSON.stringify(idx));
+      console.info("Play saved:", p.id);
+    },
+
+    loadPlay(id: string) {
+      const raw = localStorage.getItem(localKey(id));
+      if (!raw) return false;
+      try {
+        const data = JSON.parse(raw);
+        const parsed = PlaySchema.parse(data);
+        set((s) => {
+          s.play = parsed;
+          s.currentFrameIndex = 0;
+          s.editorMode = "select";
+          s.draftArrow = { active: false };
+        });
+        return true;
+      } catch (e) {
+        console.error("Load failed:", e);
+        return false;
+      }
+    },
+
+    listLocalPlays() {
+      const raw = localStorage.getItem(indexKey());
+      if (!raw) return [];
+      try {
+        const idx = JSON.parse(raw) as Array<{ id:string; name:string; updatedAt:string }>;
+        return idx.sort((a,b) => b.updatedAt.localeCompare(a.updatedAt));
+      } catch {
+        return [];
+      }
     },
   }))
 );

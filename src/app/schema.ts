@@ -1,43 +1,44 @@
-import { z } from 'zod'
+import { z } from "zod";
 
-export const xySchema = z.object({
-  x: z.number(),
-  y: z.number(),
-})
+export const XYSchema = z.object({ x: z.number(), y: z.number() });
+export const IdSchema = z.string().min(1);
 
-export const tokenSchema = z.object({
-  id: z.string(),
-  kind: z.enum(['P1', 'P2', 'P3', 'P4', 'P5', 'BALL']),
-  label: z.string(),
-})
+export const PlayerKindSchema = z.enum(["P1","P2","P3","P4","P5","BALL"]);
+export const ArrowKindSchema = z.enum(["cut","dribble","screen","pass"]);
 
-export const frameSchema = z.object({
-  id: z.string(),
-  tokens: z.record(z.string(), xySchema),
-  arrows: z.array(z.string()),
+export const TokenSchema = z.object({
+  id: IdSchema,
+  kind: PlayerKindSchema,
+  label: z.string().min(1),
+});
+
+export const FrameSchema = z.object({
+  id: IdSchema,
+  tokens: z.record(IdSchema, XYSchema),
+  arrows: z.array(IdSchema),
   note: z.string().optional(),
-})
+});
 
-export const arrowSchema = z.object({
-  id: z.string(),
-  from: z.string(),
-  toPoint: xySchema.optional(),
-  toTokenId: z.string().optional(),
-  kind: z.enum(['cut', 'dribble', 'screen', 'pass']),
-  points: z.array(xySchema),
-})
+export const ArrowSchema = z.object({
+  id: IdSchema,
+  from: IdSchema,
+  toPoint: XYSchema.optional(),
+  toTokenId: IdSchema.optional(),
+  kind: ArrowKindSchema,
+  points: z.array(XYSchema),
+});
 
-export const playSchema = z.object({
-  id: z.string(),
+export const PlaySchema = z.object({
+  id: IdSchema,
   meta: z.object({
-    name: z.string(),
+    name: z.string().min(1),
     createdAt: z.string(),
     updatedAt: z.string(),
   }),
-  tokens: z.array(tokenSchema),
-  frames: z.array(frameSchema),
-  arrowsById: z.record(z.string(), arrowSchema),
-  possession: z.string().optional(),
-})
+  tokens: z.array(TokenSchema),
+  frames: z.array(FrameSchema).min(1),
+  arrowsById: z.record(IdSchema, ArrowSchema),
+  possession: IdSchema.optional(),
+});
 
-export type PlaySchema = z.infer<typeof playSchema>
+export type PlayDTO = z.infer<typeof PlaySchema>;
