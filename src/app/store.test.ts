@@ -1,31 +1,36 @@
-import { beforeEach, describe, expect, it } from 'vitest'
-import { usePlayStore } from './store'
+import { beforeEach, describe, expect, it } from "vitest";
+import { usePlayStore } from "./store";
 
-describe('usePlayStore', () => {
+describe("usePlayStore", () => {
   beforeEach(() => {
-    usePlayStore.setState({ currentPlay: null, activeFrameIndex: 0 })
-  })
+    usePlayStore.setState(() => ({
+      play: null,
+      currentFrameIndex: 0,
+      editorMode: "select",
+      draftArrow: { active: false },
+    }));
+  });
 
-  it('creates an empty play with a default frame and tokens', () => {
-    const { createEmptyPlay } = usePlayStore.getState()
+  it("initializes a default play with a starting frame and tokens", () => {
+    const { initDefaultPlay } = usePlayStore.getState();
 
-    createEmptyPlay('Test Play')
-    const { currentPlay, activeFrameIndex } = usePlayStore.getState()
+    initDefaultPlay("Test Play");
+    const state = usePlayStore.getState();
 
-    expect(currentPlay).not.toBeNull()
-    expect(currentPlay?.frames).toHaveLength(1)
-    expect(currentPlay?.tokens).toHaveLength(6)
-    expect(activeFrameIndex).toBe(0)
-  })
+    expect(state.play).not.toBeNull();
+    expect(state.play?.frames).toHaveLength(1);
+    expect(Object.keys(state.play?.frames[0]?.tokens ?? {})).toHaveLength(6);
+    expect(state.currentFrameIndex).toBe(0);
+  });
 
-  it('adds a new frame and advances the active frame index', () => {
-    const { createEmptyPlay, addFrame } = usePlayStore.getState()
+  it("adds a computed frame and advances the active frame index", () => {
+    const { initDefaultPlay, advanceFrame } = usePlayStore.getState();
 
-    createEmptyPlay('Test Play')
-    addFrame()
-    const { currentPlay, activeFrameIndex } = usePlayStore.getState()
+    initDefaultPlay("Test Play");
+    advanceFrame();
+    const state = usePlayStore.getState();
 
-    expect(currentPlay?.frames).toHaveLength(2)
-    expect(activeFrameIndex).toBe(1)
-  })
-})
+    expect(state.play?.frames).toHaveLength(2);
+    expect(state.currentFrameIndex).toBe(1);
+  });
+});
