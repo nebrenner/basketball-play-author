@@ -1,40 +1,36 @@
-export type Id = string
-export type XY = { x: number; y: number }
+export type Id = string;
+export type XY = { x: number; y: number };
 
-export type PlayerKind = 'P1' | 'P2' | 'P3' | 'P4' | 'P5' | 'BALL'
-export type ArrowKind = 'cut' | 'dribble' | 'screen' | 'pass'
+export type PlayerKind = "P1" | "P2" | "P3" | "P4" | "P5" | "BALL";
+export type ArrowKind = "cut" | "dribble" | "screen" | "pass";
 
 export type Token = {
-  id: Id
-  kind: PlayerKind
-  label: string
-}
+  id: Id; // stable across frames
+  kind: PlayerKind;
+  label: string; // "1".."5" or "●"
+};
 
 export type Frame = {
-  id: Id
-  tokens: Record<Id, XY>
-  arrows: Id[]
-  note?: string
-}
+  id: Id;
+  tokens: Record<Id, XY>; // token positions at this frame
+  arrows: Id[]; // which arrows to render during this step
+  note?: string;
+};
 
 export type Arrow = {
-  id: Id
-  from: Id
-  toPoint?: XY
-  toTokenId?: Id
-  kind: ArrowKind
-  points: XY[]
-}
+  id: Id;
+  from: Id; // source token id
+  toPoint?: XY; // endpoint (cut/dribble/screen)
+  toTokenId?: Id; // pass target
+  kind: ArrowKind;
+  points: XY[]; // polyline for curve/preview (flattened)
+};
 
 export type Play = {
-  id: Id
-  meta: {
-    name: string
-    createdAt: string
-    updatedAt: string
-  }
-  tokens: Token[]
-  frames: Frame[]
-  arrowsById: Record<Id, Arrow>
-  possession?: Id
-}
+  id: Id;
+  meta: { name: string; createdAt: string; updatedAt: string };
+  tokens: Token[]; // roster (six tokens)
+  frames: Frame[]; // frame[0] is initial placement
+  arrowsById: Record<Id, Arrow>; // arrows authored for frames
+  possession?: Id; // which player holds the ball (token id)
+};
