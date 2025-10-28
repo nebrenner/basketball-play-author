@@ -25,13 +25,15 @@ export function advanceFrame(play: Play, currentIndex: number): Frame | null {
         const toPos = next.tokens[a.toTokenId];
         if (toPos) {
           next.tokens["BALL"] = { x: toPos.x, y: toPos.y };
-          // NOTE: possession is kept on Play.meta level; UI can update separately if desired
         }
       }
     } else {
       // cut / dribble / screen move the source token to the endpoint
       if (a.toPoint) {
         next.tokens[a.from] = { x: a.toPoint.x, y: a.toPoint.y };
+        if (a.kind === "dribble" && play.possession === a.from) {
+          next.tokens["BALL"] = { x: a.toPoint.x, y: a.toPoint.y };
+        }
       }
     }
   }

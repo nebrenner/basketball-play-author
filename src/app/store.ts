@@ -20,6 +20,7 @@ type DraftArrow =
       kind: ArrowKind;
       fromTokenId: Id;
       points: XY[];
+      hasStarted: boolean;
     }
   | { active: false };
 
@@ -33,6 +34,7 @@ type StoreState = {
   currentFrameIndex: number;
   snapToGrid: boolean;
   selectedTokenId: Id | null;
+  selectedArrowId: Id | null;
 
   draftArrow: DraftArrow;
 
@@ -51,13 +53,18 @@ type StoreState = {
   initDefaultPlay: (name?: string) => void;
   setTokenPosition: (tokenId: Id, xy: XY) => void;
   setSelectedToken: (id: Id | null) => void;
+  setSelectedArrow: (id: Id | null) => void;
+  setPossession: (id: Id | null) => void;
 
   // arrow authoring
   beginArrow: (kind: ArrowKind, fromTokenId: Id, start: XY) => void;
+  startArrowDrag: () => void;
   updateArrowPreview: (pt: XY) => void;
   commitArrowToPoint: (finalPoint: XY) => void;
   commitArrowToToken: (toTokenId: Id) => void;
   cancelArrow: () => void;
+  updateArrowEndpoint: (arrowId: Id, point: XY) => void;
+  deleteArrow: (arrowId: Id) => void;
 
   // frames
   advanceFrame: () => void;
@@ -125,6 +132,7 @@ export const usePlayStore = create<StoreState>()(
     currentFrameIndex: 0,
     snapToGrid: true,
     selectedTokenId: null,
+    selectedArrowId: null,
 
     draftArrow: { active: false },
 
@@ -143,6 +151,7 @@ export const usePlayStore = create<StoreState>()(
       set((s) => {
         s.editorMode = mode;
         s.draftArrow = { active: false };
+        s.selectedArrowId = null;
       });
     },
 
@@ -190,6 +199,7 @@ export const usePlayStore = create<StoreState>()(
         s.editorMode = "select";
         s.draftArrow = { active: false };
         s.selectedTokenId = null;
+        s.selectedArrowId = null;
       });
     },
 
@@ -206,13 +216,44 @@ export const usePlayStore = create<StoreState>()(
     setSelectedToken(id) {
       set((s) => {
         s.selectedTokenId = id;
+        if (id !== null) {
+          s.selectedArrowId = null;
+        }
+      });
+    },
+
+    setSelectedArrow(id) {
+      set((s) => {
+        s.selectedArrowId = id;
+        if (id !== null) {
+          s.selectedTokenId = null;
+        }
+      });
+    },
+
+    setPossession(id) {
+      set((s) => {
+        if (!s.play) return;
+        if (!id) {
+          s.play.possession = undefined;
+        } else {
+          s.play.possession = id;
+        }
+        s.play.meta.updatedAt = new Date().toISOString();
       });
     },
 
     // ---- Arrow authoring ----
     beginArrow(kind, fromTokenId, start) {
       set((s) => {
-        s.draftArrow = { active: true, kind, fromTokenId, points: [start, start] };
+        s.draftArrow = { active: true, kind, fromTokenId, points: [start, start], hasStarted: false };
+      });
+    },
+
+    startArrowDrag() {
+      set((s) => {
+        if (!s.draftArrow.active) return;
+        s.draftArrow.hasStarted = true;
       });
     },
 
@@ -227,49 +268,103 @@ export const usePlayStore = create<StoreState>()(
     commitArrowToPoint(finalPoint) {
       set((s) => {
         if (!s.play || !s.draftArrow.active) return;
-        const { kind, fromTokenId, points } = s.draftArrow;
+        const { kind, fromTokenId, points, hasStarted } = s.draftArrow;
+        if (!hasStarted) {
+          s.draftArrow = { active: false };
+          return;
+        }
         if (kind === "pass") return;
         const id = nanoid();
+        const snapped = snap(finalPoint, s.snapToGrid);
         const arrow: Arrow = {
           id,
           from: fromTokenId,
-          toPoint: finalPoint,
+          toPoint: snapped,
           toTokenId: undefined,
           kind,
-          points: [...points.slice(0, -1), finalPoint],
+          points: [...points.slice(0, -1), snapped],
         };
         s.play.arrowsById[id] = arrow;
         const frame = s.play.frames[s.currentFrameIndex];
         frame.arrows.push(id);
         s.draftArrow = { active: false };
         s.play.meta.updatedAt = new Date().toISOString();
+        s.selectedArrowId = id;
       });
     },
 
     commitArrowToToken(toTokenId) {
       set((s) => {
         if (!s.play || !s.draftArrow.active) return;
-        const { kind, fromTokenId, points } = s.draftArrow;
+        const { kind, fromTokenId, points, hasStarted } = s.draftArrow;
+        if (!hasStarted) {
+          s.draftArrow = { active: false };
+          return;
+        }
         if (kind !== "pass") return;
         const id = nanoid();
+        const frame = s.play.frames[s.currentFrameIndex];
+        const targetPos = frame?.tokens[toTokenId];
         const arrow: Arrow = {
           id,
           from: fromTokenId,
-          toPoint: undefined,
+          toPoint: targetPos ? { x: targetPos.x, y: targetPos.y } : undefined,
           toTokenId,
           kind,
-          points,
+          points:
+            points.length > 1
+              ? [...points.slice(0, -1), targetPos ?? points[points.length - 1]]
+              : targetPos
+                ? [targetPos]
+                : points,
         };
         s.play.arrowsById[id] = arrow;
-        const frame = s.play.frames[s.currentFrameIndex];
-        frame.arrows.push(id);
+        if (frame) {
+          frame.arrows.push(id);
+        }
         s.draftArrow = { active: false };
+        s.play.possession = toTokenId;
         s.play.meta.updatedAt = new Date().toISOString();
+        s.selectedArrowId = id;
       });
     },
 
     cancelArrow() {
-      set((s) => { s.draftArrow = { active: false }; });
+      set((s) => {
+        s.draftArrow = { active: false };
+      });
+    },
+
+    updateArrowEndpoint(arrowId, point) {
+      set((s) => {
+        if (!s.play) return;
+        const arrow = s.play.arrowsById[arrowId];
+        if (!arrow) return;
+        if (arrow.kind === "pass") return;
+        const snapped = snap(point, s.snapToGrid);
+        arrow.toPoint = { x: snapped.x, y: snapped.y };
+        if (arrow.points.length) {
+          arrow.points[arrow.points.length - 1] = arrow.toPoint;
+        } else {
+          arrow.points.push(arrow.toPoint);
+        }
+        s.play.meta.updatedAt = new Date().toISOString();
+      });
+    },
+
+    deleteArrow(arrowId) {
+      set((s) => {
+        if (!s.play) return;
+        if (!s.play.arrowsById[arrowId]) return;
+        delete s.play.arrowsById[arrowId];
+        for (const frame of s.play.frames) {
+          frame.arrows = frame.arrows.filter((id) => id !== arrowId);
+        }
+        if (s.selectedArrowId === arrowId) {
+          s.selectedArrowId = null;
+        }
+        s.play.meta.updatedAt = new Date().toISOString();
+      });
     },
 
     // ---- Frames ----

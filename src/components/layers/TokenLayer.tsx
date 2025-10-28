@@ -8,7 +8,7 @@ import type { Id, Token, XY } from "../../app/types";
 type TokenNodeProps = {
   token: Token;
   position: XY;
-  possessionId: Id;
+  possessionId: Id | null;
   onDragEnd: (tokenId: Id, xy: XY) => void;
   onSelect: (tokenId: Id) => void;
   isSelected: boolean;
@@ -41,7 +41,7 @@ const TokenNode: React.FC<TokenNodeProps> = ({ token, position, possessionId, on
         onDragEnd(token.id, { x, y });
       }}
     >
-      {token.id === possessionId && !isBall && (
+      {possessionId === token.id && !isBall && (
         <Circle radius={radius + 6} stroke="#94a3b8" strokeWidth={2} opacity={0.6} />
       )}
       {isSelected && (
@@ -79,7 +79,7 @@ const TokenLayer: React.FC = () => {
 
   if (!play || !curr) return null;
 
-  const possessionId = play.possession ?? "P1";
+  const possessionId = play.possession ?? null;
   const draggable = mode === "select";
 
   return (
