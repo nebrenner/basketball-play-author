@@ -79,8 +79,27 @@ const StageCanvas: React.FC = () => {
       const target = e.target;
       const targetName = target?.name();
 
+      const pos = pointerPosition(e);
+      if (!pos) {
+        dragSeed.current = null;
+        return;
+      }
+
       if (!kind) {
-        if (!target || (targetName !== "token-node" && !targetName?.startsWith("arrow-"))) {
+        const play = state.play;
+        const curr = state.currentFrame();
+        if (play && curr) {
+          const clickedTokenId = tokenAt(pos, play, curr);
+          if (clickedTokenId) {
+            if (state.selectedTokenId !== clickedTokenId) {
+              state.setSelectedToken(clickedTokenId);
+            }
+            dragSeed.current = null;
+            return;
+          }
+        }
+
+        if (!target || (!targetName || !targetName.startsWith("arrow-"))) {
           state.setSelectedToken(null);
           state.setSelectedArrow(null);
         }
@@ -89,12 +108,6 @@ const StageCanvas: React.FC = () => {
       }
 
       if (targetName && targetName.startsWith("arrow-")) {
-        dragSeed.current = null;
-        return;
-      }
-
-      const pos = pointerPosition(e);
-      if (!pos) {
         dragSeed.current = null;
         return;
       }
@@ -134,6 +147,9 @@ const StageCanvas: React.FC = () => {
       }
 
       dragSeed.current = { kind, fromId: clickedTokenId, start: source };
+      state.beginArrow(kind, clickedTokenId, source);
+      state.startArrowDrag();
+      state.updateArrowPreview(source);
     },
     [ensureArrowPermissions],
   );
@@ -147,19 +163,6 @@ const StageCanvas: React.FC = () => {
     if (draft.active) {
       state.updateArrowPreview(pos);
       return;
-    }
-
-    if (dragSeed.current) {
-      const { start, kind, fromId } = dragSeed.current;
-      const dx = pos.x - start.x;
-      const dy = pos.y - start.y;
-      const distSq = dx * dx + dy * dy;
-      if (distSq > 25) {
-        state.beginArrow(kind, fromId, start);
-        state.startArrowDrag();
-        state.updateArrowPreview(pos);
-        dragSeed.current = null;
-      }
     }
   }, []);
 
@@ -186,14 +189,29 @@ const StageCanvas: React.FC = () => {
       return;
     }
 
+    const start = dragSeed.current?.start ?? draft.points[0];
+    const minDistanceSq = 9;
+
     if (draft.kind === "pass") {
       const toId = tokenAt(pos, play, curr);
       if (toId && toId !== draft.fromTokenId) {
+        state.updateArrowPreview(pos);
         state.commitArrowToToken(toId);
       } else {
         state.cancelArrow();
       }
     } else {
+      if (start) {
+        const dx = pos.x - start.x;
+        const dy = pos.y - start.y;
+        const distSq = dx * dx + dy * dy;
+        if (distSq < minDistanceSq) {
+          state.cancelArrow();
+          dragSeed.current = null;
+          return;
+        }
+      }
+      state.updateArrowPreview(pos);
       state.commitArrowToPoint(pos);
     }
     dragSeed.current = null;
