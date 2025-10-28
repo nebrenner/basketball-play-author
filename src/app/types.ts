@@ -26,7 +26,7 @@ export type Arrow = {
   toPoint?: XY; // endpoint (cut/dribble/screen)
   toTokenId?: Id; // pass target
   kind: ArrowKind;
-  points: XY[]; // polyline for curve/preview (flattened)
+  points: XY[]; // path points (start/control/end) for rendering and animation
 };
 
 export type Play = {
