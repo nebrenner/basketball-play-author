@@ -42,6 +42,7 @@ const StageCanvas: React.FC = () => {
   const setSelectedToken = usePlayStore((s) => s.setSelectedToken);
   const setSelectedArrow = usePlayStore((s) => s.setSelectedArrow);
   const createArrow = usePlayStore((s) => s.createArrow);
+  const setStageRef = usePlayStore((s) => s.setStageRef);
 
   const scale = width > 0 ? width / stageWidth : 1;
   const height = stageHeight * scale;
@@ -92,6 +93,13 @@ const StageCanvas: React.FC = () => {
     [isInteractiveTarget, setSelectedToken, setSelectedArrow],
   );
 
+  const handleStageRef = React.useCallback(
+    (node: Konva.Stage | null) => {
+      setStageRef(node);
+    },
+    [setStageRef],
+  );
+
   React.useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
       if (event.key === "Delete" || event.key === "Backspace") {
@@ -134,6 +142,7 @@ const StageCanvas: React.FC = () => {
         scale={{ x: scale, y: scale }}
         className="stage-root"
         onMouseDown={handleStageMouseDown}
+        ref={handleStageRef}
       >
         <Layer listening={false}>
           <CourtLayer />
