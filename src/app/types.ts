@@ -4,6 +4,8 @@ export type XY = { x: number; y: number };
 export type PlayerKind = "P1" | "P2" | "P3" | "P4" | "P5" | "BALL";
 export type ArrowKind = "cut" | "dribble" | "screen" | "pass";
 
+export type CourtType = "half" | "full";
+
 export type Token = {
   id: Id; // stable across frames
   kind: PlayerKind;
@@ -33,4 +35,5 @@ export type Play = {
   frames: Frame[]; // frame[0] is initial placement
   arrowsById: Record<Id, Arrow>; // arrows authored for frames
   possession?: Id; // which player holds the ball (token id)
+  courtType: CourtType;
 };

@@ -8,6 +8,7 @@ describe("usePlayStore", () => {
       currentFrameIndex: 0,
       editorMode: "select",
       draftArrow: { active: false },
+      courtType: "half",
     }));
   });
 
@@ -32,5 +33,20 @@ describe("usePlayStore", () => {
 
     expect(state.play?.frames).toHaveLength(2);
     expect(state.currentFrameIndex).toBe(1);
+  });
+
+  it("updates the default frame when switching court types", () => {
+    const { initDefaultPlay } = usePlayStore.getState();
+
+    initDefaultPlay("Test Play");
+    const before = usePlayStore.getState();
+    const beforeP1X = before.play?.frames[0]?.tokens.P1?.x ?? 0;
+
+    usePlayStore.getState().setCourtType("full");
+    const after = usePlayStore.getState();
+
+    expect(after.courtType).toBe("full");
+    expect(after.play?.courtType).toBe("full");
+    expect(after.play?.frames[0]?.tokens.P1?.x).not.toBeCloseTo(beforeP1X);
   });
 });
