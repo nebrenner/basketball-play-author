@@ -38,30 +38,39 @@ const CourtLayer: React.FC = () => {
   const centerX = left + courtWidth / 2;
   const centerY = top + courtHeight / 2;
 
-  const laneDepth = courtWidth * 0.19;
-  const laneHeight = courtHeight * 0.32;
-  const laneTop = centerY - laneHeight / 2;
-  const freeThrowRadius = courtHeight * 0.12;
-  const rimOffset = laneDepth * 0.28;
-  const boardOffset = laneDepth * 0.18;
   const rimRadius = 11;
-  const threePointRadius = courtHeight * 0.475;
-  const threePointBreak = courtWidth * 0.15;
-
-  const laneMarkLength = laneDepth * 0.08;
-  const blockWidth = laneDepth * 0.08;
-  const blockHeight = laneHeight * 0.12;
-  const blockOffset = laneHeight * 0.18;
-  const dashPositions = [0.32, 0.5, 0.68].map((ratio) => laneTop + laneHeight * ratio);
 
   const renderFullKey = (side: "left" | "right") => {
     const baselineX = side === "left" ? left : left + courtWidth;
     const interiorDir = side === "left" ? 1 : -1;
+    const halfCourtLength = courtWidth / 2;
+
+    const laneDepth = halfCourtLength * 0.65;
+    const laneHeight = courtHeight * 0.26;
+    const laneTop = centerY - laneHeight / 2;
     const laneX = side === "left" ? baselineX : baselineX - laneDepth;
     const freeThrowLineX = baselineX + interiorDir * laneDepth;
+
+    const rimOffset = courtWidth * 0.06;
+    const boardOffset = courtWidth * 0.045;
     const rimX = baselineX + interiorDir * rimOffset;
     const boardX = baselineX + interiorDir * boardOffset;
+    const boardHeight = courtHeight * 0.1;
 
+    const freeThrowRadius = laneHeight * 0.5;
+
+    const laneMarkLength = laneDepth * 0.08;
+    const blockWidth = laneDepth * 0.06;
+    const blockHeight = laneHeight * 0.08;
+    const blockOffset = laneHeight * 0.3;
+    const dashPositions = [0.5, 0.7, 0.9].map((ratio) => laneTop + laneHeight * ratio);
+    const blockPositions = [
+      laneTop + blockOffset - blockHeight / 2,
+      laneTop + laneHeight - blockOffset - blockHeight / 2,
+    ];
+
+    const threePointRadius = courtHeight * 0.38;
+    const threePointBreak = courtWidth * 0.12;
     const cornerDistance = threePointBreak - rimOffset;
     const cosTheta = clamp(cornerDistance / threePointRadius, -1, 1);
     const theta = Math.acos(cosTheta);
@@ -69,12 +78,16 @@ const CourtLayer: React.FC = () => {
     const topY = centerY - cornerYOffset;
     const bottomY = centerY + cornerYOffset;
 
-    const threePointArcPoints = makeArcPoints(rimX, centerY, threePointRadius, -theta, theta, 48, interiorDir, 1);
-
-    const blockPositions = [
-      laneTop + blockOffset - blockHeight / 2,
-      laneTop + laneHeight - blockOffset - blockHeight / 2,
-    ];
+    const threePointArcPoints = makeArcPoints(
+      rimX,
+      centerY,
+      threePointRadius,
+      -theta,
+      theta,
+      64,
+      interiorDir,
+      1,
+    );
 
     return (
       <Group key={side}>
@@ -152,7 +165,7 @@ const CourtLayer: React.FC = () => {
           </React.Fragment>
         ))}
         <Line
-          points={[boardX, centerY - 22, boardX, centerY + 22]}
+          points={[boardX, centerY - boardHeight / 2, boardX, centerY + boardHeight / 2]}
           stroke={lineColor}
           strokeWidth={3}
         />
@@ -180,8 +193,9 @@ const CourtLayer: React.FC = () => {
     const freeThrowLineY = baselineY + laneLength;
     const rimY = baselineY + courtWidth * 0.06;
     const boardY = baselineY + courtWidth * 0.045;
-    const boardWidth = courtWidth*0.1;
+    const boardWidth = courtWidth * 0.1;
     const freeThrowRadiusHalf = laneWidthHalf * 0.5;
+    const laneMarkLength = laneWidthHalf * 0.08;
     const verticalDashPositions = [0.5, 0.7, 0.9].map((ratio) => baselineY + laneLength * ratio);
     const halfBlockWidth = laneWidthHalf * 0.06;
     const halfBlockHeight = laneLength * 0.08;
