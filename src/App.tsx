@@ -12,10 +12,39 @@ const App: React.FC = () => {
   const save = usePlayStore((s) => s.savePlay);
   const list = usePlayStore((s) => s.listLocalPlays);
   const load = usePlayStore((s) => s.loadPlay);
+  const setPlayName = usePlayStore((s) => s.setPlayName);
+  const deletePlay = usePlayStore((s) => s.deletePlay);
+  const plays = list();
+  const [selectedPlayId, setSelectedPlayId] = React.useState<string>("");
 
   React.useEffect(() => {
     if (!play) init("Demo Play");
   }, [play, init]);
+
+  React.useEffect(() => {
+    if (!selectedPlayId) return;
+    if (!plays.find((p) => p.id === selectedPlayId)) {
+      setSelectedPlayId("");
+    }
+  }, [plays, selectedPlayId]);
+
+  const handleSave = React.useCallback(() => {
+    save();
+  }, [save]);
+
+  const handleLoad = React.useCallback(() => {
+    if (!selectedPlayId) return;
+    load(selectedPlayId);
+  }, [load, selectedPlayId]);
+
+  const handleDelete = React.useCallback(() => {
+    if (!selectedPlayId) return;
+    const target = plays.find((p) => p.id === selectedPlayId);
+    const name = target?.name || "this play";
+    if (!window.confirm(`Delete "${name}"? This cannot be undone.`)) return;
+    deletePlay(selectedPlayId);
+    setSelectedPlayId("");
+  }, [deletePlay, plays, selectedPlayId]);
 
   return (
     <div className="app-root">
@@ -32,9 +61,23 @@ const App: React.FC = () => {
           borderBottom: "1px solid #1e293b",
         }}
       >
-        <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <input
+            type="text"
+            value={play?.meta.name ?? ""}
+            onChange={(e) => setPlayName(e.target.value)}
+            placeholder="Play name"
+            style={{
+              padding: "6px 8px",
+              borderRadius: 6,
+              border: "1px solid #374151",
+              background: "#0b1220",
+              color: "#e5e7eb",
+              minWidth: 180,
+            }}
+          />
           <button
-            onClick={save}
+            onClick={handleSave}
             style={{
               padding: "6px 10px",
               borderRadius: 8,
@@ -46,25 +89,56 @@ const App: React.FC = () => {
             Save
           </button>
           <select
-            onChange={(e) => e.target.value && load(e.target.value)}
+            value={selectedPlayId}
+            onChange={(e) => setSelectedPlayId(e.target.value)}
             style={{
               background: "#0b1220",
               color: "#e5e7eb",
               border: "1px solid #374151",
               borderRadius: 6,
               padding: "4px 6px",
+              minWidth: 160,
             }}
-            defaultValue=""
           >
             <option value="" disabled>
-              Load...
+              Saved plays
             </option>
-            {list().map((p) => (
+            {plays.map((p) => (
               <option key={p.id} value={p.id}>
-                {p.name}
+                {p.name || "(untitled play)"}
               </option>
             ))}
           </select>
+          <button
+            onClick={handleLoad}
+            disabled={!selectedPlayId}
+            style={{
+              padding: "6px 10px",
+              borderRadius: 8,
+              border: "1px solid #374151",
+              background: selectedPlayId ? "#0b1220" : "#111827",
+              color: "#e5e7eb",
+              opacity: selectedPlayId ? 1 : 0.5,
+              cursor: selectedPlayId ? "pointer" : "not-allowed",
+            }}
+          >
+            Load
+          </button>
+          <button
+            onClick={handleDelete}
+            disabled={!selectedPlayId}
+            style={{
+              padding: "6px 10px",
+              borderRadius: 8,
+              border: "1px solid #7f1d1d",
+              background: selectedPlayId ? "#450a0a" : "#111827",
+              color: "#fca5a5",
+              opacity: selectedPlayId ? 1 : 0.5,
+              cursor: selectedPlayId ? "pointer" : "not-allowed",
+            }}
+          >
+            Delete
+          </button>
         </div>
         <div style={{ flex: 1 }}>
           <Toolbar />
