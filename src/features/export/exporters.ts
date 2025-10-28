@@ -5,7 +5,13 @@ import type Konva from "konva";
 const IMAGE_PIXEL_RATIO = 2;
 const VIDEO_PIXEL_RATIO = 1;
 const VIDEO_FPS = 60;
-const FINAL_FRAME_HOLD_MS = 300;
+const FIRST_FRAME_HOLD_MS = 2000;
+const TRANSITION_HOLD_MS = 1000;
+const FINAL_FRAME_HOLD_MS = 5000;
+
+function wait(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 function sanitizeName(name: string | undefined, fallback: string): string {
   const base = name?.trim() ?? "";
@@ -152,10 +158,23 @@ export async function exportAnimationAsVideo(): Promise<void> {
     };
     pumpFrame();
 
-    await new Promise((resolve) => setTimeout(resolve, 100));
-    await usePlayStore.getState().playAnimation();
-    await waitForStage(stage);
-    await new Promise((resolve) => setTimeout(resolve, FINAL_FRAME_HOLD_MS));
+    await wait(100);
+    const state = usePlayStore.getState();
+    const frameCount = play.frames.length;
+
+    await wait(FIRST_FRAME_HOLD_MS);
+
+    if (frameCount === 1) {
+      await wait(FINAL_FRAME_HOLD_MS);
+    } else {
+      for (let i = 0; i < frameCount - 1; i += 1) {
+        await state.stepForward();
+        await waitForStage(stage);
+        const isLastTransition = i === frameCount - 2;
+        const holdDuration = isLastTransition ? FINAL_FRAME_HOLD_MS : TRANSITION_HOLD_MS;
+        await wait(holdDuration);
+      }
+    }
 
     recording = false;
     if (recorder.state !== "inactive") {
