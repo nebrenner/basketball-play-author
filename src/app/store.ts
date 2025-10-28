@@ -29,6 +29,7 @@ type StoreState = {
   setSnap: (value: boolean) => void;
   setCourtType: (type: CourtType) => void;
   initDefaultPlay: (name?: string) => void;
+  setPlayName: (name: string) => void;
   setTokenPosition: (tokenId: Id, xy: XY) => void;
   setSelectedToken: (id: Id | null) => void;
   setSelectedArrow: (id: Id | null) => void;
@@ -54,6 +55,7 @@ type StoreState = {
   savePlay: () => void;
   loadPlay: (id: string) => boolean;
   listLocalPlays: () => Array<{ id: string; name: string; updatedAt: string }>;
+  deletePlay: (id: string) => void;
 };
 
 const makeDefaultTokens = (): Token[] => [
@@ -160,6 +162,14 @@ export const usePlayStore = create<StoreState>()(
         s.currentFrameIndex = 0;
         s.selectedTokenId = null;
         s.selectedArrowId = null;
+      });
+    },
+
+    setPlayName(name) {
+      set((s) => {
+        if (!s.play) return;
+        if (s.play.meta.name === name) return;
+        s.play.meta.name = name;
       });
     },
 
@@ -359,26 +369,47 @@ export const usePlayStore = create<StoreState>()(
 
     // ---- Persistence (LocalStorage) ----
     savePlay() {
-      const s = get();
-      const p = s.play;
-      if (!p) return;
-      const parsed = PlaySchema.safeParse(p);
+      const state = get();
+      const current = state.play;
+      if (!current) return;
+
+      let name = current.meta.name?.trim() ?? "";
+      if (!name) {
+        const entered = window.prompt("Name this play:", current.meta.name || "New Play");
+        name = entered?.trim() ?? "";
+        if (!name) {
+          console.info("Save cancelled: name is required");
+          return;
+        }
+      }
+
+      const updatedAt = new Date().toISOString();
+      const finalName = name;
+      set((s) => {
+        if (!s.play) return;
+        s.play.meta.name = finalName;
+        s.play.meta.updatedAt = updatedAt;
+      });
+
+      const latest = get().play;
+      if (!latest) return;
+      const parsed = PlaySchema.safeParse(latest);
       if (!parsed.success) {
         console.error("Save failed: invalid play", parsed.error);
         return;
       }
-      localStorage.setItem(localKey(p.id), JSON.stringify(parsed.data));
+      localStorage.setItem(localKey(parsed.data.id), JSON.stringify(parsed.data));
       const idxRaw = localStorage.getItem(indexKey());
       const idx = idxRaw ? JSON.parse(idxRaw) as Array<{ id:string; name:string; updatedAt:string }> : [];
-      const existing = idx.find((x) => x.id === p.id);
+      const existing = idx.find((x) => x.id === parsed.data.id);
       if (existing) {
-        existing.name = p.meta.name;
-        existing.updatedAt = p.meta.updatedAt;
+        existing.name = parsed.data.meta.name;
+        existing.updatedAt = parsed.data.meta.updatedAt;
       } else {
-        idx.push({ id: p.id, name: p.meta.name, updatedAt: p.meta.updatedAt });
+        idx.push({ id: parsed.data.id, name: parsed.data.meta.name, updatedAt: parsed.data.meta.updatedAt });
       }
       localStorage.setItem(indexKey(), JSON.stringify(idx));
-      console.info("Play saved:", p.id);
+      console.info("Play saved:", parsed.data.id);
     },
 
     loadPlay(id: string) {
@@ -410,6 +441,18 @@ export const usePlayStore = create<StoreState>()(
       } catch {
         return [];
       }
+    },
+
+    deletePlay(id) {
+      const raw = localStorage.getItem(indexKey());
+      const idx = raw ? JSON.parse(raw) as Array<{ id:string; name:string; updatedAt:string }> : [];
+      const next = idx.filter((entry) => entry.id !== id);
+      if (next.length > 0) {
+        localStorage.setItem(indexKey(), JSON.stringify(next));
+      } else {
+        localStorage.removeItem(indexKey());
+      }
+      localStorage.removeItem(localKey(id));
     },
   }))
 );
