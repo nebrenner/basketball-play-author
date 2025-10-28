@@ -1,73 +1,43 @@
-# React + TypeScript + Vite
+# Basketball Play Author
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A Vite + React + TypeScript application for diagramming basketball plays and replaying them step-by-step. The app uses Konva for canvas rendering, Zustand + Immer for state management, and Zod for runtime validation of saved plays.
 
-Currently, two official plugins are available:
+## Getting Started
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
-
-## React Compiler
-
-The React Compiler is currently not compatible with SWC. See [this issue](https://github.com/vitejs/vite-plugin-react/issues/428) for tracking the progress.
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm install
+npm run dev
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+Open the development server URL (typically http://localhost:5173) to access the editor.
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+## Project Structure
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
 ```
+src/
+  app/            # Shared store, schemas, and domain types
+  components/     # Canvas layers and UI widgets
+  features/       # Arrow, frame, and token helpers
+  pages/          # High-level editor and playback screens
+  assets/         # Static court artwork and related assets
+```
+
+## Key Libraries
+
+- **Konva + react-konva**: Canvas rendering for the court, tokens, and arrows.
+- **Zustand + Immer**: Lightweight state management with immutable updates.
+- **Zod**: Runtime validation primitives for persisted play data.
+- **nanoid**: Stable ID generation across frames and tokens.
+
+## Available Scripts
+
+- `npm run dev` – Start the development server.
+- `npm run build` – Generate a production build.
+- `npm run preview` – Preview the production build locally.
+- `npm run lint` – Run ESLint checks.
+
+## Next Steps
+
+- Implement arrow drawing interactions and frame advancement.
+- Persist plays to local storage or IndexedDB.
+- Add playback animations using `Konva.Tween` for smooth transitions.
