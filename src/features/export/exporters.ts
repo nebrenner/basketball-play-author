@@ -7,6 +7,9 @@ import type { Frame, Play } from "../../app/types";
 import { buildPlayStepSpec, runPlayStep } from "../frames/playback";
 
 const IMAGE_PIXEL_RATIO = 2;
+const PDF_IMAGE_PIXEL_RATIO = 1.1;
+const PDF_IMAGE_MIME_TYPE = "image/jpeg";
+const PDF_IMAGE_QUALITY = 0.7;
 const VIDEO_PIXEL_RATIO = 1;
 const VIDEO_FPS = 60;
 const FIRST_FRAME_HOLD_MS = 2000;
@@ -238,8 +241,12 @@ export async function exportPlayAsPdf(): Promise<void> {
       }
 
       const imageX = margin + (availableWidth - renderWidth) / 2;
-      const dataUrl = stage.toDataURL({ pixelRatio: IMAGE_PIXEL_RATIO });
-      pdf.addImage(dataUrl, "PNG", imageX, cursorY, renderWidth, renderHeight);
+      const dataUrl = stage.toDataURL({
+        pixelRatio: PDF_IMAGE_PIXEL_RATIO,
+        mimeType: PDF_IMAGE_MIME_TYPE,
+        quality: PDF_IMAGE_QUALITY,
+      });
+      pdf.addImage(dataUrl, "JPEG", imageX, cursorY, renderWidth, renderHeight);
       cursorY += renderHeight + 16;
 
       if (noteLines.length > 0) {
