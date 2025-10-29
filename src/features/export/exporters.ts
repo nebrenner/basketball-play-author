@@ -16,13 +16,28 @@ const FINAL_FRAME_HOLD_MS = 3000;
 type FrameExportEntry = { frame: Frame; label: string };
 
 function collectFrameExportEntries(play: Play): FrameExportEntry[] {
-  ensureFrameGraph(play);
-  const byId = new Map<Frame["id"], Frame>();
+  const normalizedPlay: Play = {
+    ...play,
+    frames: play.frames.map((frame) => ({
+      ...frame,
+      nextFrameIds: Array.isArray(frame.nextFrameIds) ? [...frame.nextFrameIds] : [],
+      parentId: frame.parentId ?? null,
+    })),
+  };
+
+  ensureFrameGraph(normalizedPlay);
+
+  const originalById = new Map<Frame["id"], Frame>();
   for (const frame of play.frames) {
-    byId.set(frame.id, frame);
+    originalById.set(frame.id, frame);
   }
 
-  const root = play.frames.find((frame) => !frame.parentId) ?? play.frames[0];
+  const normalizedById = new Map<Frame["id"], Frame>();
+  for (const frame of normalizedPlay.frames) {
+    normalizedById.set(frame.id, frame);
+  }
+
+  const root = normalizedPlay.frames.find((frame) => !frame.parentId) ?? normalizedPlay.frames[0];
   if (!root) return [];
 
   const results: FrameExportEntry[] = [];
@@ -31,23 +46,28 @@ function collectFrameExportEntries(play: Play): FrameExportEntry[] {
   const visit = (frame: Frame, depth: number) => {
     if (visited.has(frame.id)) return;
     visited.add(frame.id);
-    const parent = frame.parentId ? byId.get(frame.parentId) ?? null : null;
+    const normalized = normalizedById.get(frame.id);
+    if (!normalized) return;
+    const parent = normalized.parentId ? normalizedById.get(normalized.parentId) ?? null : null;
     const parentChildren = parent
       ? (parent.nextFrameIds ?? [])
-          .map((childId) => byId.get(childId))
+          .map((childId) => normalizedById.get(childId))
           .filter((child): child is Frame => Boolean(child))
       : [];
     let label = `Step ${Math.max(1, depth)}`;
     if (parent && parentChildren.length > 1) {
-      const optionIndex = parentChildren.findIndex((child) => child.id === frame.id);
+      const optionIndex = parentChildren.findIndex((child) => child.id === normalized.id);
       if (optionIndex >= 0) {
         label += ` – Option ${optionIndex + 1}`;
       }
     }
-    results.push({ frame, label });
+    const originalFrame = originalById.get(frame.id);
+    if (originalFrame) {
+      results.push({ frame: originalFrame, label });
+    }
 
-    const children = (frame.nextFrameIds ?? [])
-      .map((childId) => byId.get(childId))
+    const children = (normalized.nextFrameIds ?? [])
+      .map((childId) => normalizedById.get(childId))
       .filter((child): child is Frame => Boolean(child));
     for (const child of children) {
       visit(child, depth + 1);
