@@ -337,7 +337,13 @@ export const usePlayStore = create<StoreState>()(
 
         const id = nanoid();
         const startPoint = { x: start.x, y: start.y };
-        const defaultEnd = snap({ x: start.x + 200, y: start.y }, s.snapToGrid);
+        const defaultDistance = 200;
+        const edgePadding = TOKEN_RADIUS;
+        const drawsRightByDefault = start.x + defaultDistance <= s.stageWidth - edgePadding;
+        const rawEndX = drawsRightByDefault
+          ? Math.min(start.x + defaultDistance, s.stageWidth - edgePadding)
+          : Math.max(start.x - defaultDistance, edgePadding);
+        const defaultEnd = snap({ x: rawEndX, y: start.y }, s.snapToGrid);
         const defaultControl = {
           x: (startPoint.x + defaultEnd.x) / 2,
           y: (startPoint.y + defaultEnd.y) / 2,
