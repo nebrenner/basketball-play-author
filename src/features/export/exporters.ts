@@ -5,6 +5,7 @@ import type Konva from "konva";
 import { collectPlaybackOrder, ensureFrameGraph, findFrameById } from "../frames/frameGraph";
 import type { Frame, Play } from "../../app/types";
 import { buildPlayStepSpec, runPlayStep } from "../frames/playback";
+import { formatOptionTitle, formatStepTitle } from "../frames/frameLabels";
 
 const IMAGE_PIXEL_RATIO = 2;
 const PDF_IMAGE_PIXEL_RATIO = 1.1;
@@ -57,14 +58,17 @@ function collectFrameExportEntries(play: Play): FrameExportEntry[] {
           .map((childId) => normalizedById.get(childId))
           .filter((child): child is Frame => Boolean(child))
       : [];
-    let label = `Step ${Math.max(1, depth)}`;
+    const originalFrame = originalById.get(frame.id);
+    const labelFrame = originalFrame ?? frame;
+    const stepLabel = formatStepTitle(labelFrame, Math.max(1, depth));
+    let label = stepLabel;
     if (parent && parentChildren.length > 1) {
       const optionIndex = parentChildren.findIndex((child) => child.id === normalized.id);
       if (optionIndex >= 0) {
-        label += ` – Option ${optionIndex + 1}`;
+        const optionLabel = formatOptionTitle(labelFrame, optionIndex + 1);
+        label = `${stepLabel} – ${optionLabel}`;
       }
     }
-    const originalFrame = originalById.get(frame.id);
     if (originalFrame) {
       results.push({ frame: originalFrame, label });
     }

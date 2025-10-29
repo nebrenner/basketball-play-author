@@ -45,6 +45,8 @@ type StoreState = {
   setSelectedArrow: (id: Id | null) => void;
   setPossession: (id: Id | null) => void;
   setCurrentFrameNote: (note: string) => void;
+  setCurrentFrameTitle: (title: string) => void;
+  setCurrentFrameOptionLabel: (label: string) => void;
 
   // arrow authoring
   createArrow: (kind: ArrowKind, fromTokenId: Id) => void;
@@ -313,6 +315,46 @@ export const usePlayStore = create<StoreState>()(
           delete frame.note;
         } else {
           frame.note = value;
+        }
+        s.play.meta.updatedAt = new Date().toISOString();
+      });
+    },
+
+    setCurrentFrameTitle(title) {
+      set((s) => {
+        if (!s.play) return;
+        const index = clampFrameIndex(s.currentBranchPath, s.currentFrameIndex);
+        const frameId = s.currentBranchPath[index];
+        const frame = getFrameById(s.play, frameId);
+        if (!frame) return;
+        const value = title.trim();
+        if (!value) {
+          if (frame.title === undefined) return;
+          delete frame.title;
+        } else if (frame.title === value) {
+          return;
+        } else {
+          frame.title = value;
+        }
+        s.play.meta.updatedAt = new Date().toISOString();
+      });
+    },
+
+    setCurrentFrameOptionLabel(label) {
+      set((s) => {
+        if (!s.play) return;
+        const index = clampFrameIndex(s.currentBranchPath, s.currentFrameIndex);
+        const frameId = s.currentBranchPath[index];
+        const frame = getFrameById(s.play, frameId);
+        if (!frame || !frame.parentId) return;
+        const value = label.trim();
+        if (!value) {
+          if (frame.optionLabel === undefined) return;
+          delete frame.optionLabel;
+        } else if (frame.optionLabel === value) {
+          return;
+        } else {
+          frame.optionLabel = value;
         }
         s.play.meta.updatedAt = new Date().toISOString();
       });

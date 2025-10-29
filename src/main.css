@@ -73,12 +73,38 @@ body {
   padding: 12px;
 }
 
+.frame-note-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
 .frame-note-area label {
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: #94a3b8;
   font-weight: 600;
+}
+
+.frame-note-area input[type="text"] {
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid #1f2937;
+  background: #0b1220;
+  color: #e5e7eb;
+  font-size: 14px;
+}
+
+.frame-note-area input[type="text"]:focus {
+  outline: none;
+  border-color: #2563eb;
+  box-shadow: 0 0 0 1px rgba(37, 99, 235, 0.25);
+}
+
+.frame-note-area input[type="text"]:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .frame-note-area textarea {
@@ -103,6 +129,12 @@ body {
 .frame-note-area textarea:disabled {
   opacity: 0.6;
   cursor: not-allowed;
+}
+
+.frame-note-hint {
+  margin: 0;
+  font-size: 11px;
+  color: #64748b;
 }
 
 .stage-root {
