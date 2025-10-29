@@ -64,6 +64,19 @@ describe("usePlayStore", () => {
     expect(newFrame?.possession).toBe("P2");
   });
 
+  it("allows setting the starting possession to a different player", () => {
+    const { initDefaultPlay, setPossession } = usePlayStore.getState();
+
+    initDefaultPlay("Test Play");
+    setPossession("P3");
+
+    const state = usePlayStore.getState();
+    const frame = state.play?.frames[state.currentFrameIndex];
+
+    expect(state.play?.possession).toBe("P3");
+    expect(frame?.possession).toBe("P3");
+  });
+
   it("updates the default frame when switching court types", () => {
     const { initDefaultPlay } = usePlayStore.getState();
 
