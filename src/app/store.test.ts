@@ -123,4 +123,34 @@ describe("usePlayStore", () => {
     expect(after.play?.courtType).toBe("full");
     expect(after.play?.frames[0]?.tokens.P1?.x).not.toBeCloseTo(beforeP1X);
   });
+
+  it("lets the user set custom step and option labels", () => {
+    const { initDefaultPlay, setCurrentFrameTitle, advanceFrame, setCurrentFrameOptionLabel } =
+      usePlayStore.getState();
+
+    initDefaultPlay("Test Play");
+    setCurrentFrameTitle("Opening Alignment");
+
+    let state = usePlayStore.getState();
+    let frame = currentFrameOf(state);
+    expect(frame?.title).toBe("Opening Alignment");
+
+    // Blank strings should clear the value
+    setCurrentFrameTitle("   ");
+    state = usePlayStore.getState();
+    frame = currentFrameOf(state);
+    expect(frame?.title).toBeUndefined();
+
+    advanceFrame();
+    setCurrentFrameOptionLabel("Swing Pass");
+
+    state = usePlayStore.getState();
+    frame = currentFrameOf(state);
+    expect(frame?.optionLabel).toBe("Swing Pass");
+
+    setCurrentFrameOptionLabel("");
+    state = usePlayStore.getState();
+    frame = currentFrameOf(state);
+    expect(frame?.optionLabel).toBeUndefined();
+  });
 });

@@ -1,6 +1,7 @@
 import React from "react";
 import { usePlayStore } from "../../app/store";
 import { findFrameById } from "../../features/frames/frameGraph";
+import { formatOptionTitle, formatStepTitle } from "../../features/frames/frameLabels";
 
 const Btn: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement>> = ({ children, ...rest }) => (
   <button
@@ -37,7 +38,8 @@ const TimelineBar: React.FC = () => {
   const pathDescriptors = path.map((frameId, index) => {
     const frame = findFrameById(play, frameId);
     const branchCount = frame?.nextFrameIds?.length ?? 0;
-    return { id: frameId, index, branchCount };
+    const label = formatStepTitle(frame ?? undefined, index + 1);
+    return { id: frameId, index, branchCount, label };
   });
 
   const frameAtCursor = play ? findFrameById(play, currentFrameId) : null;
@@ -89,14 +91,14 @@ const TimelineBar: React.FC = () => {
 
       <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
         <span style={{ color: "#cbd5e1", fontSize: 13 }}>Path:</span>
-        {pathDescriptors.map(({ id, index, branchCount }) => (
+        {pathDescriptors.map(({ id, index, branchCount, label }) => (
           <Btn
             key={id}
             onClick={() => setIndex(index)}
             disabled={index === idx}
             title={branchCount > 1 ? `${branchCount} branch options from this step` : undefined}
           >
-            {index === idx ? `● Step ${index + 1}` : `Step ${index + 1}`}
+            {index === idx ? `● ${label}` : label}
             {branchCount > 1 ? ` (${branchCount})` : ""}
           </Btn>
         ))}
@@ -109,7 +111,8 @@ const TimelineBar: React.FC = () => {
           </span>
           {branchOptions.map((childId, optionIndex) => {
             const isActive = nextActiveId === childId;
-            const label = `Option ${optionIndex + 1}`;
+            const childFrame = findFrameById(play, childId);
+            const label = formatOptionTitle(childFrame ?? undefined, optionIndex + 1);
             return (
               <Btn
                 key={childId}

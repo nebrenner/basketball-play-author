@@ -17,6 +17,8 @@ export const FrameSchema = z.object({
   id: IdSchema,
   tokens: z.record(IdSchema, XYSchema),
   arrows: z.array(IdSchema),
+  title: z.string().min(1).optional(),
+  optionLabel: z.string().min(1).optional(),
   note: z.string().optional(),
   possession: IdSchema.optional(),
   parentId: IdSchema.nullable().optional(),
