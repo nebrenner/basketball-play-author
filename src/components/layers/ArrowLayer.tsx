@@ -21,6 +21,43 @@ const toBezierRenderablePoints = (points: XY[]): XY[] => {
   return [start, control1, control2, end];
 };
 
+const WAVY_SAMPLE_SPACING = 18;
+const WAVY_AMPLITUDE = 6;
+
+const applyWavyEffect = (points: XY[]): XY[] => {
+  if (points.length < 2) return points;
+
+  const samples: XY[] = [points[0]];
+  let accumulated = 0;
+
+  for (let i = 1; i < points.length; i++) {
+    const prev = points[i - 1];
+    const curr = points[i];
+    const dx = curr.x - prev.x;
+    const dy = curr.y - prev.y;
+    const segmentLength = Math.hypot(dx, dy);
+    if (segmentLength === 0) continue;
+
+    const steps = Math.max(2, Math.round(segmentLength / WAVY_SAMPLE_SPACING));
+    const nx = -dy / segmentLength;
+    const ny = dx / segmentLength;
+
+    for (let step = 1; step <= steps; step++) {
+      const t = step / steps;
+      const x = prev.x + dx * t;
+      const y = prev.y + dy * t;
+      accumulated += segmentLength / steps;
+      const offset = Math.sin((accumulated / WAVY_SAMPLE_SPACING) * Math.PI) * WAVY_AMPLITUDE;
+      samples.push({ x: x + nx * offset, y: y + ny * offset });
+    }
+  }
+
+  // Ensure the final sample matches the original end point precisely.
+  samples[samples.length - 1] = points[points.length - 1];
+
+  return samples;
+};
+
 const ArrowGlyph: React.FC<{ arrow: ArrowType; emphasize?: boolean; points: XY[] }> = ({ arrow, emphasize, points }) => {
   const s = styleFor(arrow.kind);
   const curved = hasCustomCurve(points);
@@ -29,37 +66,69 @@ const ArrowGlyph: React.FC<{ arrow: ArrowType; emphasize?: boolean; points: XY[]
     : points.length >= 2
       ? [points[0], points[points.length - 1]]
       : points;
-  const pts: number[] = renderable.length > 1 ? toFlatPoints(renderable) : [];
 
+  const withEffects = s.pathEffect === "wavy" && !curved ? applyWavyEffect(renderable) : renderable;
+  const pts: number[] = withEffects.length > 1 ? toFlatPoints(withEffects) : [];
+
+  const strokeWidth = emphasize ? s.strokeWidth + 1.5 : s.strokeWidth;
   const common = {
     stroke: s.stroke,
-    strokeWidth: emphasize ? s.strokeWidth + 1.5 : s.strokeWidth,
+    strokeWidth,
     dash: s.dash,
+    shadowBlur: emphasize ? 8 : 0,
+    shadowColor: s.stroke,
   } as const;
 
-  const isCurved = curved && renderable.length > 2;
+  if (s.drawPointer) {
+    const useBezier = curved && withEffects.length > 2 && s.pathEffect !== "wavy";
+    return (
+      <KArrow
+        name="arrow-shape"
+        points={pts}
+        {...common}
+        fill={s.stroke}
+        pointerLength={s.pointerLength ?? 12}
+        pointerWidth={s.pointerWidth ?? 12}
+        bezier={useBezier}
+      />
+    );
+  }
 
-  return s.bezier ? (
-    <Line
-      name="arrow-shape"
-      points={pts}
-      {...common}
-      bezier={isCurved}
-      shadowBlur={emphasize ? 8 : 0}
-      shadowColor={s.stroke}
-    />
-  ) : (
-    <KArrow
-      name="arrow-shape"
-      points={pts}
-      {...common}
-      fill={s.stroke}
-      pointerLength={s.pointerLength}
-      pointerWidth={s.pointerWidth}
-      bezier={isCurved}
-      shadowBlur={emphasize ? 8 : 0}
-      shadowColor={s.stroke}
-    />
+  const tDecoration = () => {
+    if (!s.tCap || withEffects.length < 2) return null;
+    const tip = withEffects[withEffects.length - 1];
+    const prev = withEffects[withEffects.length - 2];
+    const dx = tip.x - prev.x;
+    const dy = tip.y - prev.y;
+    const len = Math.hypot(dx, dy) || 1;
+    const ux = dx / len;
+    const uy = dy / len;
+    const nx = -uy;
+    const ny = ux;
+    const crossCenter = {
+      x: tip.x - ux * s.tCap.offset,
+      y: tip.y - uy * s.tCap.offset,
+    };
+    const halfWidth = s.tCap.width / 2;
+    return (
+      <Line
+        name="arrow-screen-cap"
+        points={[
+          crossCenter.x + nx * halfWidth,
+          crossCenter.y + ny * halfWidth,
+          crossCenter.x - nx * halfWidth,
+          crossCenter.y - ny * halfWidth,
+        ]}
+        {...common}
+      />
+    );
+  };
+
+  return (
+    <>
+      <Line name="arrow-shape" points={pts} {...common} />
+      {tDecoration()}
+    </>
   );
 };
 
