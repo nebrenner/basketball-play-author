@@ -1,6 +1,7 @@
 import React from "react";
 import { Group, Rect, Line, Circle, Arc } from "react-konva";
 import { usePlayStore } from "../../app/store";
+import { COURT_PADDING } from "../../constants/court";
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
 
@@ -29,7 +30,7 @@ const CourtLayer: React.FC = () => {
   const H = usePlayStore((s) => s.stageHeight);
   const courtType = usePlayStore((s) => s.courtType);
 
-  const padding = 10;
+  const padding = COURT_PADDING;
   const lineColor = "#bfa57a";
   const courtWidth = W - padding * 2;
   const courtHeight = H - padding * 2;

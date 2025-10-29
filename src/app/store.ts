@@ -6,8 +6,9 @@ import type { Play, Token, Frame, Id, XY, ArrowKind, CourtType, Arrow } from "./
 import { advanceFrame as computeNextFrame } from "../features/frames/frameEngine";
 import { buildPlayStepSpec, runPlayStep } from "../features/frames/playback";
 import { buildArrowPath } from "../features/arrows/arrowUtils";
-import { TOKEN_RADIUS } from "../features/tokens/tokenGeometry";
 import { ensureFrameGraph, findFrameById, buildPathToFrame, collectPlaybackOrder } from "../features/frames/frameGraph";
+import { TOKEN_RADIUS, ballPositionFor } from "../features/tokens/tokenGeometry";
+import { COURT_PADDING } from "../constants/court";
 import { PlaySchema } from "./schema";
 
 type PlayIndexEntry = { id: string; name: string; updatedAt: string };
@@ -82,23 +83,38 @@ const makeDefaultTokens = (): Token[] => [
   { id: "P5", kind: "P5", label: "5" },
 ];
 
+const OLD_COURT_PADDING = 10;
+
 const defaultPositions = (W: number, H: number, courtType: CourtType): Record<Id, XY> => {
+  const normalize = (value: number, total: number) => {
+    const oldPlayable = total - OLD_COURT_PADDING * 2;
+    if (oldPlayable <= 0) return value;
+    const normalized = (value - OLD_COURT_PADDING) / oldPlayable;
+    const clamped = Math.max(0, Math.min(1, normalized));
+    return COURT_PADDING + clamped * (total - COURT_PADDING * 2);
+  };
+
+  const position = (rx: number, ry: number) => ({
+    x: normalize(W * rx, W),
+    y: normalize(H * ry, H),
+  });
+
   if (courtType === "full") {
     return {
-      P1: { x: W * 0.18, y: H * 0.50 },
-      P2: { x: W * 0.35, y: H * 0.32 },
-      P3: { x: W * 0.35, y: H * 0.68 },
-      P4: { x: W * 0.60, y: H * 0.40 },
-      P5: { x: W * 0.78, y: H * 0.62 },
+      P1: position(0.18, 0.5),
+      P2: position(0.35, 0.32),
+      P3: position(0.35, 0.68),
+      P4: position(0.6, 0.4),
+      P5: position(0.78, 0.62),
     } as Record<Id, XY>;
   }
 
   return {
-    P1: { x: W * 0.48, y: H * 0.50 },
-    P2: { x: W * 0.40, y: H * 0.32 },
-    P3: { x: W * 0.40, y: H * 0.68 },
-    P4: { x: W * 0.64, y: H * 0.42 },
-    P5: { x: W * 0.72, y: H * 0.58 },
+    P1: position(0.48, 0.5),
+    P2: position(0.4, 0.32),
+    P3: position(0.4, 0.68),
+    P4: position(0.64, 0.42),
+    P5: position(0.72, 0.58),
   } as Record<Id, XY>;
 };
 
