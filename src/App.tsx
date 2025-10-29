@@ -1,5 +1,6 @@
 import React from "react";
 import StageCanvas from "./components/StageCanvas";
+import FrameNoteEditor from "./components/ui/FrameNoteEditor";
 import { usePlayStore } from "./app/store";
 import "./main.css";
 import Toolbar from "./components/ui/Toolbar";
@@ -278,7 +279,10 @@ const App: React.FC = () => {
       </div>
 
       <main className="app-main">
-        <StageCanvas />
+        <div className="play-surface">
+          <StageCanvas />
+          <FrameNoteEditor />
+        </div>
       </main>
     </div>
   );

@@ -44,6 +44,7 @@ type StoreState = {
   setSelectedToken: (id: Id | null) => void;
   setSelectedArrow: (id: Id | null) => void;
   setPossession: (id: Id | null) => void;
+  setCurrentFrameNote: (note: string) => void;
 
   // arrow authoring
   createArrow: (kind: ArrowKind, fromTokenId: Id) => void;
@@ -295,6 +296,24 @@ export const usePlayStore = create<StoreState>()(
         if (!frame) return;
         s.play.possession = id ?? undefined;
         frame.possession = id ?? undefined;
+        s.play.meta.updatedAt = new Date().toISOString();
+      });
+    },
+
+    setCurrentFrameNote(note) {
+      set((s) => {
+        if (!s.play) return;
+        const index = clampFrameIndex(s.currentBranchPath, s.currentFrameIndex);
+        const frameId = s.currentBranchPath[index];
+        const frame = getFrameById(s.play, frameId);
+        if (!frame) return;
+        const value = note === "" ? undefined : note;
+        if (frame.note === value) return;
+        if (value === undefined) {
+          delete frame.note;
+        } else {
+          frame.note = value;
+        }
         s.play.meta.updatedAt = new Date().toISOString();
       });
     },
