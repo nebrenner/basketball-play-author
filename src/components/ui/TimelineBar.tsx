@@ -1,5 +1,6 @@
 import React from "react";
 import { usePlayStore } from "../../app/store";
+import { findFrameById } from "../../features/frames/frameGraph";
 
 const Btn: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement>> = ({ children, ...rest }) => (
   <button
@@ -20,41 +21,109 @@ const Btn: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement>> = ({ children
 
 const TimelineBar: React.FC = () => {
   const idx = usePlayStore((s) => s.currentFrameIndex);
+  const path = usePlayStore((s) => s.currentBranchPath);
   const play = usePlayStore((s) => s.play);
   const setIndex = usePlayStore((s) => s.setCurrentFrameIndex);
-  const deleteLast = usePlayStore((s) => s.deleteLastFrame);
+  const focusFrame = usePlayStore((s) => s.focusFrameById);
+  const deleteCurrent = usePlayStore((s) => s.deleteLastFrame);
   const advanceFrame = usePlayStore((s) => s.advanceFrame);
 
-  const total = play?.frames.length ?? 0;
-  if (!play) return null;
+  if (!play || path.length === 0) return null;
+
+  const total = path.length;
   const atFirst = idx <= 0;
   const atLast = idx >= total - 1;
+  const currentFrameId = path[idx];
+  const pathDescriptors = path.map((frameId, index) => {
+    const frame = findFrameById(play, frameId);
+    const branchCount = frame?.nextFrameIds?.length ?? 0;
+    return { id: frameId, index, branchCount };
+  });
+
+  const frameAtCursor = play ? findFrameById(play, currentFrameId) : null;
+  const branchOptions = frameAtCursor?.nextFrameIds ?? [];
+
+  const nextActiveId = path[idx + 1] ?? null;
+  const canDeleteCurrent = (() => {
+    if (!frameAtCursor) return false;
+    if (!frameAtCursor.parentId) return false;
+    if (idx !== path.length - 1) return false;
+    return (frameAtCursor.nextFrameIds ?? []).length === 0;
+  })();
 
   return (
-    <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-      <Btn onClick={() => setIndex(0)} disabled={atFirst} title="Jump to first frame">
-        ⏮ First
-      </Btn>
-      <Btn onClick={() => setIndex(Math.max(0, idx - 1))} disabled={atFirst}>
-        ◀ Prev
-      </Btn>
-      <div style={{ color: "#cbd5e1", fontSize: 13 }}>Frame {idx + 1} / {total}</div>
-      <Btn onClick={() => setIndex(Math.min(total - 1, idx + 1))} disabled={atLast}>
-        Next ▶
-      </Btn>
-      <Btn onClick={() => setIndex(Math.max(0, total - 1))} disabled={atLast} title="Jump to last frame">
-        Last ⏭
-      </Btn>
+    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <Btn onClick={() => setIndex(0)} disabled={atFirst} title="Jump to first step">
+          ⏮ First
+        </Btn>
+        <Btn onClick={() => setIndex(Math.max(0, idx - 1))} disabled={atFirst}>
+          ◀ Prev
+        </Btn>
+        <div style={{ color: "#cbd5e1", fontSize: 13 }}>Step {idx + 1} / {total}</div>
+        <Btn onClick={() => setIndex(Math.min(total - 1, idx + 1))} disabled={atLast}>
+          Next ▶
+        </Btn>
+        <Btn onClick={() => setIndex(Math.max(0, total - 1))} disabled={atLast} title="Jump to last step">
+          Last ⏭
+        </Btn>
 
-      <div style={{ flex: 1 }} />
-      <div style={{ display: "flex", gap: 8 }}>
-        <Btn onClick={deleteLast} disabled={total <= 1} title="Delete last frame (keeps at least 1)">
-          Delete Last
-        </Btn>
-        <Btn onClick={advanceFrame} title="Advance to next frame by applying current arrows">
-          Next Step ➜
-        </Btn>
+        <div style={{ flex: 1 }} />
+        <div style={{ display: "flex", gap: 8 }}>
+          <Btn
+            onClick={deleteCurrent}
+            disabled={!canDeleteCurrent}
+            title={
+              canDeleteCurrent
+                ? "Delete this step (only allowed for leaf steps)"
+                : "Only leaf steps can be deleted"
+            }
+          >
+            Delete Step
+          </Btn>
+          <Btn onClick={advanceFrame} title="Create a new step branching from the current frame">
+            New Step ➜
+          </Btn>
+        </div>
       </div>
+
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+        <span style={{ color: "#cbd5e1", fontSize: 13 }}>Path:</span>
+        {pathDescriptors.map(({ id, index, branchCount }) => (
+          <Btn
+            key={id}
+            onClick={() => setIndex(index)}
+            disabled={index === idx}
+            title={branchCount > 1 ? `${branchCount} branch options from this step` : undefined}
+          >
+            {index === idx ? `● Step ${index + 1}` : `Step ${index + 1}`}
+            {branchCount > 1 ? ` (${branchCount})` : ""}
+          </Btn>
+        ))}
+      </div>
+
+      {branchOptions.length > 0 && (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+          <span style={{ color: "#cbd5e1", fontSize: 13 }}>
+            Branches from this step:
+          </span>
+          {branchOptions.map((childId, optionIndex) => {
+            const isActive = nextActiveId === childId;
+            const label = `Option ${optionIndex + 1}`;
+            return (
+              <Btn
+                key={childId}
+                onClick={() => focusFrame(childId)}
+                disabled={isActive}
+                title={isActive ? "Currently following this branch" : "Follow this branch"}
+              >
+                {label}
+                {isActive ? " ✓" : ""}
+              </Btn>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 };

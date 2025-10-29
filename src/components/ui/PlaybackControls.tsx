@@ -53,9 +53,9 @@ const PlaybackControls: React.FC = () => {
     }
   }, [pending]);
   const canStep = usePlayStore((s) => {
-    const p = s.play;
+    const path = s.currentBranchPath;
     const i = s.currentFrameIndex;
-    return !!p && i < p.frames.length - 1;
+    return path.length > 0 && i < path.length - 1;
   });
 
   return (
