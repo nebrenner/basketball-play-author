@@ -45,7 +45,6 @@ const StageCanvas: React.FC = () => {
   const setStageRef = usePlayStore((s) => s.setStageRef);
 
   const scale = width > 0 ? width / stageWidth : 1;
-  const height = stageHeight * scale;
 
   const selectedTokenPosition = React.useMemo<XY | null>(() => {
     if (!selectedTokenId || !currentFrame) return null;
@@ -135,7 +134,7 @@ const StageCanvas: React.FC = () => {
   }, [selectedTokenPosition, scale]);
 
   return (
-    <div className="canvas-wrap" ref={ref} style={{ height }}>
+    <div className="canvas-wrap" ref={ref}>
       <Stage
         width={stageWidth}
         height={stageHeight}

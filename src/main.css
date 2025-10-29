@@ -54,7 +54,8 @@ body {
 }
 
 .canvas-wrap {
-  width: min(1200px, 100%);
+  width: 1230px;
+  height: 790px;
   /* the Stage scales to width; height follows aspect ratio in code */
   background: #111827;
   border: 1px solid #1f2937;
@@ -64,6 +65,7 @@ body {
 }
 
 .frame-note-area {
+  width: 1230px;
   display: flex;
   flex-direction: column;
   gap: 8px;
