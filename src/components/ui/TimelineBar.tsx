@@ -44,7 +44,6 @@ const TimelineBar: React.FC = () => {
 
   const frameAtCursor = play ? findFrameById(play, currentFrameId) : null;
   const branchOptions = frameAtCursor?.nextFrameIds ?? [];
-  const showBranchOptions = branchOptions.length > 1;
 
   const nextActiveId = path[idx + 1] ?? null;
   const canDeleteCurrent = (() => {
@@ -105,7 +104,7 @@ const TimelineBar: React.FC = () => {
         ))}
       </div>
 
-      {showBranchOptions && (
+      {branchOptions.length > 0 && (
         <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
           <span style={{ color: "#cbd5e1", fontSize: 13 }}>
             Branches from this step:
