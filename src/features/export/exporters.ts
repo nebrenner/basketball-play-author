@@ -1,6 +1,8 @@
 import { downloadBlob, downloadDataUrl } from "./download";
 import { usePlayStore } from "../../app/store";
 import type Konva from "konva";
+import { collectPlaybackOrder, findFrameById } from "../frames/frameGraph";
+import { buildPlayStepSpec, runPlayStep } from "../frames/playback";
 
 const IMAGE_PIXEL_RATIO = 2;
 const VIDEO_PIXEL_RATIO = 1;
@@ -100,6 +102,7 @@ export async function exportAnimationAsVideo(): Promise<void> {
   }
 
   const originalIndex = initialState.currentFrameIndex;
+  const originalPath = [...initialState.currentBranchPath];
   const wasPlaying = initialState.isPlaying;
   if (wasPlaying) {
     initialState.pauseAnimation();
@@ -136,8 +139,14 @@ export async function exportAnimationAsVideo(): Promise<void> {
 
   let recording = false;
 
+  const order = collectPlaybackOrder(play);
+
   try {
-    usePlayStore.getState().setCurrentFrameIndex(0);
+    if (order.length > 0) {
+      usePlayStore.getState().focusFrameById(order[0]);
+    } else {
+      usePlayStore.getState().setCurrentFrameIndex(0);
+    }
     await waitForStage(stage);
 
     const initialCanvas = stage.toCanvas({ pixelRatio: VIDEO_PIXEL_RATIO });
@@ -159,18 +168,23 @@ export async function exportAnimationAsVideo(): Promise<void> {
     pumpFrame();
 
     await wait(100);
-    const state = usePlayStore.getState();
-    const frameCount = play.frames.length;
-
     await wait(FIRST_FRAME_HOLD_MS);
 
-    if (frameCount === 1) {
+    if (order.length <= 1) {
       await wait(FINAL_FRAME_HOLD_MS);
     } else {
-      for (let i = 0; i < frameCount - 1; i += 1) {
-        await state.stepForward();
+      for (let i = 0; i < order.length - 1; i += 1) {
+        const fromId = order[i];
+        const toId = order[i + 1];
+        const fromFrame = findFrameById(play, fromId);
+        const toFrame = findFrameById(play, toId);
+        if (!fromFrame || !toFrame) continue;
+        const durationMs = initialState.baseDurationMs / initialState.speed;
+        const spec = buildPlayStepSpec(play, fromFrame, toFrame, durationMs);
+        await runPlayStep(spec);
+        usePlayStore.getState().focusFrameById(toId);
         await waitForStage(stage);
-        const isLastTransition = i === frameCount - 2;
+        const isLastTransition = i === order.length - 2;
         const holdDuration = isLastTransition ? FINAL_FRAME_HOLD_MS : TRANSITION_HOLD_MS;
         await wait(holdDuration);
       }
@@ -188,7 +202,12 @@ export async function exportAnimationAsVideo(): Promise<void> {
     throw error;
   } finally {
     recording = false;
-    usePlayStore.getState().setCurrentFrameIndex(originalIndex);
+    if (originalPath.length > 0) {
+      usePlayStore.getState().focusFrameById(originalPath[originalPath.length - 1]);
+      usePlayStore.getState().setCurrentFrameIndex(originalIndex);
+    } else {
+      usePlayStore.getState().setCurrentFrameIndex(originalIndex);
+    }
     await waitForStage(stage);
   }
 

@@ -1,6 +1,8 @@
 import Konva from "konva";
 import { getTokenNode } from "../tokens/tokenRegistry";
-import type { Id, XY } from "../../app/types";
+import type { Arrow, Frame, Id, Play, XY } from "../../app/types";
+import { buildArrowPath } from "../arrows/arrowUtils";
+import { ballPositionFor } from "../tokens/tokenGeometry";
 
 export type PlayStepMove = { id: Id; from: XY; to: XY; path?: XY[] };
 
@@ -95,4 +97,99 @@ export async function runPlayStep(spec: PlayStepSpec): Promise<void> {
     promises.push(tweenMove("BALL", spec.ballMove.from, spec.ballMove.to, spec.durationMs, spec.ballMove.path));
   }
   await Promise.all(promises);
+}
+
+const normalisePaths = (path: XY[], from: XY, to: XY): XY[] => {
+  if (!path.length) return path;
+  const next = [...path];
+  next[0] = { x: from.x, y: from.y };
+  next[next.length - 1] = { x: to.x, y: to.y };
+  return next;
+};
+
+const reversePath = (path: XY[]): XY[] => {
+  const reversed = [...path].reverse();
+  return reversed;
+};
+
+export function buildPlayStepSpec(
+  play: Play,
+  from: Frame,
+  to: Frame,
+  durationMs: number,
+): PlayStepSpec {
+  const isForward = to.parentId === from.id;
+  const isReverse = from.parentId === to.id;
+  const movementFrame = isForward ? from : isReverse ? to : from;
+  const childFrame = isForward ? to : isReverse ? from : to;
+
+  const arrowsInFrame = (movementFrame.arrows ?? [])
+    .map((arrowId) => play.arrowsById[arrowId])
+    .filter((arrow): arrow is Arrow => Boolean(arrow));
+
+  const tokenPaths = new Map<Id, XY[]>();
+  for (const arrow of arrowsInFrame) {
+    if (arrow.kind === "pass") continue;
+    const startPos = movementFrame.tokens[arrow.from];
+    const endPos = childFrame.tokens[arrow.from];
+    if (!startPos || !endPos) continue;
+    const basePath = buildArrowPath(arrow, { start: startPos, end: endPos });
+    if (!basePath.length) continue;
+    const path = isForward ? basePath : reversePath(basePath);
+    tokenPaths.set(arrow.from, normalisePaths(path, from.tokens[arrow.from] ?? startPos, to.tokens[arrow.from] ?? endPos));
+  }
+
+  const moves = Object.keys({ ...from.tokens, ...to.tokens }).flatMap((id) => {
+    const start = from.tokens[id];
+    const end = to.tokens[id];
+    if (!start || !end) return [];
+    if (start.x === end.x && start.y === end.y) return [];
+    const path = tokenPaths.get(id);
+    return [{ id, from: start, to: end, path }];
+  });
+
+  const duration = Math.max(0, durationMs);
+
+  const fromPossessionId = from.possession ?? play.possession ?? null;
+  const toPossessionId = to.possession ?? fromPossessionId;
+  const possessorForPass = movementFrame.possession ?? play.possession ?? null;
+
+  let ballMove: { from: XY; to: XY; path?: XY[] } | null = null;
+
+  const passArrowForBall = arrowsInFrame.find(
+    (arrow) => arrow.kind === "pass" && arrow.from === possessorForPass,
+  );
+
+  if (passArrowForBall) {
+    const startPos = movementFrame.tokens[passArrowForBall.from];
+    const endPosCandidate = passArrowForBall.toTokenId
+      ? childFrame.tokens[passArrowForBall.toTokenId]
+      : passArrowForBall.toPoint;
+    if (startPos && endPosCandidate) {
+      const basePath = buildArrowPath(passArrowForBall, { start: startPos, end: endPosCandidate });
+      if (basePath.length >= 2) {
+        const path = isForward ? basePath : reversePath(basePath);
+        const ballPath = path.map((pt) => ballPositionFor(pt));
+        const fromBall = ballPath[0];
+        const toBall = ballPath[ballPath.length - 1];
+        if (fromBall && toBall && (fromBall.x !== toBall.x || fromBall.y !== toBall.y)) {
+          ballMove = { from: fromBall, to: toBall, path: ballPath };
+        }
+      }
+    }
+  }
+
+  if (!ballMove && fromPossessionId) {
+    const fromPos = from.tokens[fromPossessionId];
+    const toPos = toPossessionId ? to.tokens[toPossessionId] : undefined;
+    if (fromPos && toPos) {
+      const start = ballPositionFor(fromPos);
+      const end = ballPositionFor(toPos);
+      if (start && end && (start.x !== end.x || start.y !== end.y)) {
+        ballMove = { from: start, to: end };
+      }
+    }
+  }
+
+  return { moves, durationMs: duration, ballMove };
 }

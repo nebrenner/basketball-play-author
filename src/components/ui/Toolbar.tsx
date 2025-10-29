@@ -8,7 +8,7 @@ const Toolbar: React.FC = () => {
   const possessionId = usePlayStore((s) => {
     const play = s.play;
     if (!play) return null;
-    const frame = play.frames[s.currentFrameIndex];
+    const frame = s.currentFrame();
     return frame?.possession ?? play.possession ?? null;
   });
   const setPossession = usePlayStore((s) => s.setPossession);

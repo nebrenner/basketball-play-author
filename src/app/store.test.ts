@@ -1,11 +1,19 @@
 import { beforeEach, describe, expect, it } from "vitest";
 import { usePlayStore } from "./store";
 
+const currentFrameOf = (state: ReturnType<typeof usePlayStore.getState>) => {
+  const play = state.play;
+  if (!play || state.currentBranchPath.length === 0) return null;
+  const frameId = state.currentBranchPath[state.currentFrameIndex];
+  return play.frames.find((frame) => frame.id === frameId) ?? null;
+};
+
 describe("usePlayStore", () => {
   beforeEach(() => {
     usePlayStore.setState(() => ({
       play: null,
       currentFrameIndex: 0,
+      currentBranchPath: [],
       courtType: "half",
     }));
   });
@@ -18,6 +26,7 @@ describe("usePlayStore", () => {
 
     expect(state.play).not.toBeNull();
     expect(state.play?.frames).toHaveLength(1);
+    expect(state.currentBranchPath).toHaveLength(1);
     expect(Object.keys(state.play?.frames[0]?.tokens ?? {})).toHaveLength(5);
     expect(state.play?.frames[0]?.possession).toBe("P1");
     expect(state.currentFrameIndex).toBe(0);
@@ -32,6 +41,29 @@ describe("usePlayStore", () => {
 
     expect(state.play?.frames).toHaveLength(2);
     expect(state.currentFrameIndex).toBe(1);
+    expect(state.currentBranchPath).toHaveLength(2);
+  });
+
+  it("creates a new branch when advancing from an earlier step", () => {
+    const { initDefaultPlay, advanceFrame, setCurrentFrameIndex } = usePlayStore.getState();
+
+    initDefaultPlay("Test Play");
+    advanceFrame();
+
+    const stateAfterFirstAdvance = usePlayStore.getState();
+    const firstBranchChildId = stateAfterFirstAdvance.currentBranchPath[1];
+
+    setCurrentFrameIndex(0);
+    usePlayStore.getState().advanceFrame();
+
+    const stateAfterBranch = usePlayStore.getState();
+    const rootFrame = stateAfterBranch.play?.frames[0];
+    expect(rootFrame?.nextFrameIds).toHaveLength(2);
+    expect(stateAfterBranch.play?.frames).toHaveLength(3);
+    expect(stateAfterBranch.currentBranchPath).toHaveLength(2);
+    expect(stateAfterBranch.currentFrameIndex).toBe(1);
+    const newChildId = stateAfterBranch.currentBranchPath[1];
+    expect(newChildId).not.toBe(firstBranchChildId);
   });
 
   it("captures pass targets and hands off possession on advance", () => {
@@ -45,7 +77,7 @@ describe("usePlayStore", () => {
     const stateAfterArrow = usePlayStore.getState();
     const arrowId = stateAfterArrow.selectedArrowId;
     expect(arrowId).not.toBeNull();
-    const frame = stateAfterArrow.play?.frames[stateAfterArrow.currentFrameIndex];
+    const frame = currentFrameOf(stateAfterArrow);
     const targetPos = frame?.tokens.P2;
     expect(targetPos).toBeDefined();
 
@@ -60,7 +92,7 @@ describe("usePlayStore", () => {
 
     const afterAdvance = usePlayStore.getState();
     expect(afterAdvance.play?.frames).toHaveLength(2);
-    const newFrame = afterAdvance.play?.frames[1];
+    const newFrame = currentFrameOf(afterAdvance);
     expect(newFrame?.possession).toBe("P2");
   });
 
@@ -71,7 +103,7 @@ describe("usePlayStore", () => {
     setPossession("P3");
 
     const state = usePlayStore.getState();
-    const frame = state.play?.frames[state.currentFrameIndex];
+    const frame = currentFrameOf(state);
 
     expect(state.play?.possession).toBe("P3");
     expect(frame?.possession).toBe("P3");

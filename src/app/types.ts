@@ -18,6 +18,8 @@ export type Frame = {
   arrows: Id[]; // which arrows to render during this step
   note?: string;
   possession?: Id;
+  parentId?: Id | null;
+  nextFrameIds?: Id[];
 };
 
 export type Arrow = {

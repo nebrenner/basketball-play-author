@@ -19,6 +19,8 @@ export const FrameSchema = z.object({
   arrows: z.array(IdSchema),
   note: z.string().optional(),
   possession: IdSchema.optional(),
+  parentId: IdSchema.nullable().optional(),
+  nextFrameIds: z.array(IdSchema).optional(),
 });
 
 export const ArrowSchema = z.object({

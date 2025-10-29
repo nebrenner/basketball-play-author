@@ -4,8 +4,7 @@ import type { Play, Frame, Id, XY, Arrow } from "../../app/types";
 const clonePositions = (src: Record<Id, XY>) =>
   Object.fromEntries(Object.entries(src).map(([k, v]) => [k, { x: v.x, y: v.y }]));
 
-export function advanceFrame(play: Play, currentIndex: number): Frame | null {
-  const curr = play.frames[currentIndex];
+export function advanceFrame(play: Play, curr: Frame): Frame | null {
   if (!curr) return null;
 
   const currPossession = curr.possession ?? play.possession;
@@ -15,6 +14,8 @@ export function advanceFrame(play: Play, currentIndex: number): Frame | null {
     tokens: clonePositions(curr.tokens),
     arrows: [], // policy: new frame starts with no teaching arrows
     possession: currPossession,
+    parentId: curr.id,
+    nextFrameIds: [],
   };
 
   let nextPossession: Id | undefined = currPossession;

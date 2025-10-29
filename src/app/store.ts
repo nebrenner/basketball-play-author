@@ -2,10 +2,11 @@ import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
 import { nanoid } from "nanoid";
 import type Konva from "konva";
-import type { Play, Token, Frame, Id, XY, Arrow, ArrowKind, CourtType } from "./types";
+import type { Play, Token, Frame, Id, XY, ArrowKind, CourtType, Arrow } from "./types";
 import { advanceFrame as computeNextFrame } from "../features/frames/frameEngine";
-import { runPlayStep } from "../features/frames/playback";
+import { buildPlayStepSpec, runPlayStep } from "../features/frames/playback";
 import { buildArrowPath } from "../features/arrows/arrowUtils";
+import { ensureFrameGraph, findFrameById, buildPathToFrame, collectPlaybackOrder } from "../features/frames/frameGraph";
 import { TOKEN_RADIUS, ballPositionFor } from "../features/tokens/tokenGeometry";
 import { COURT_PADDING } from "../constants/court";
 import { PlaySchema } from "./schema";
@@ -19,6 +20,7 @@ type StoreState = {
 
   play: Play | null;
   currentFrameIndex: number;
+  currentBranchPath: Id[];
   storageRevision: number;
   snapToGrid: boolean;
   selectedTokenId: Id | null;
@@ -52,6 +54,7 @@ type StoreState = {
   // frames
   advanceFrame: () => void;
   setCurrentFrameIndex: (i: number) => void;
+  focusFrameById: (id: Id) => void;
   deleteLastFrame: () => void;
 
   // playback controls
@@ -152,6 +155,14 @@ function persistPlay(play: Play) {
   writeIndex(idx);
 }
 
+const getFrameById = (play: Play | null, id: Id | null | undefined): Frame | null =>
+  findFrameById(play ?? null, id ?? null) ?? null;
+
+const clampFrameIndex = (path: Id[], index: number): number => {
+  if (!path.length) return 0;
+  return Math.max(0, Math.min(index, path.length - 1));
+};
+
 export const usePlayStore = create<StoreState>()(
   immer((set, get) => ({
     stageWidth: 1200,
@@ -160,6 +171,7 @@ export const usePlayStore = create<StoreState>()(
 
     play: null,
     currentFrameIndex: 0,
+    currentBranchPath: [],
     storageRevision: 0,
     snapToGrid: true,
     selectedTokenId: null,
@@ -173,8 +185,10 @@ export const usePlayStore = create<StoreState>()(
 
     currentFrame() {
       const state = get();
-      if (!state.play) return null;
-      return state.play.frames[state.currentFrameIndex] ?? null;
+      if (!state.play || !state.currentBranchPath.length) return null;
+      const index = clampFrameIndex(state.currentBranchPath, state.currentFrameIndex);
+      const frameId = state.currentBranchPath[index];
+      return getFrameById(state.play, frameId);
     },
 
     setSnap(value) {
@@ -204,7 +218,14 @@ export const usePlayStore = create<StoreState>()(
         const tokens = makeDefaultTokens();
         const positions = defaultPositions(W, H, s.courtType);
 
-        const frame0: Frame = { id: nanoid(), tokens: positions, arrows: [], possession: "P1" };
+        const frame0: Frame = {
+          id: nanoid(),
+          tokens: positions,
+          arrows: [],
+          possession: "P1",
+          parentId: null,
+          nextFrameIds: [],
+        };
 
         s.play = {
           id: nanoid(),
@@ -219,7 +240,9 @@ export const usePlayStore = create<StoreState>()(
           possession: "P1",
           courtType: s.courtType,
         };
+        ensureFrameGraph(s.play);
         s.currentFrameIndex = 0;
+        s.currentBranchPath = [frame0.id];
         s.selectedTokenId = null;
         s.selectedArrowId = null;
       });
@@ -236,7 +259,9 @@ export const usePlayStore = create<StoreState>()(
     setTokenPosition(tokenId, xy) {
       set((s) => {
         if (!s.play) return;
-        const frame = s.play.frames[s.currentFrameIndex];
+        const index = clampFrameIndex(s.currentBranchPath, s.currentFrameIndex);
+        const frameId = s.currentBranchPath[index];
+        const frame = getFrameById(s.play, frameId);
         if (!frame) return;
         frame.tokens[tokenId] = snap({ x: xy.x, y: xy.y }, s.snapToGrid);
         s.play.meta.updatedAt = new Date().toISOString();
@@ -264,7 +289,9 @@ export const usePlayStore = create<StoreState>()(
     setPossession(id) {
       set((s) => {
         if (!s.play) return;
-        const frame = s.play.frames[s.currentFrameIndex];
+        const index = clampFrameIndex(s.currentBranchPath, s.currentFrameIndex);
+        const frameId = s.currentBranchPath[index];
+        const frame = getFrameById(s.play, frameId);
         if (!frame) return;
         s.play.possession = id ?? undefined;
         frame.possession = id ?? undefined;
@@ -276,7 +303,9 @@ export const usePlayStore = create<StoreState>()(
     createArrow(kind, fromTokenId) {
       set((s) => {
         if (!s.play) return;
-        const frame = s.play.frames[s.currentFrameIndex];
+        const index = clampFrameIndex(s.currentBranchPath, s.currentFrameIndex);
+        const frameId = s.currentBranchPath[index];
+        const frame = getFrameById(s.play, frameId);
         if (!frame) return;
         const start = frame.tokens[fromTokenId];
         if (!start) return;
@@ -315,7 +344,9 @@ export const usePlayStore = create<StoreState>()(
         if (!s.play) return;
         const arrow = s.play.arrowsById[arrowId];
         if (!arrow) return;
-        const frame = s.play.frames[s.currentFrameIndex];
+        const index = clampFrameIndex(s.currentBranchPath, s.currentFrameIndex);
+        const frameId = s.currentBranchPath[index];
+        const frame = getFrameById(s.play, frameId);
         if (!frame) return;
 
         const snapped = snap(point, s.snapToGrid);
@@ -362,7 +393,9 @@ export const usePlayStore = create<StoreState>()(
         if (!s.play) return;
         const arrow = s.play.arrowsById[arrowId];
         if (!arrow) return;
-        const frame = s.play.frames[s.currentFrameIndex];
+        const index = clampFrameIndex(s.currentBranchPath, s.currentFrameIndex);
+        const frameId = s.currentBranchPath[index];
+        const frame = getFrameById(s.play, frameId);
         if (!frame) return;
 
         const snapped = snap(point, s.snapToGrid);
@@ -401,37 +434,90 @@ export const usePlayStore = create<StoreState>()(
     advanceFrame() {
       set((s) => {
         if (!s.play) return;
-        const next = computeNextFrame(s.play, s.currentFrameIndex);
+        if (!s.currentBranchPath.length) return;
+        const index = clampFrameIndex(s.currentBranchPath, s.currentFrameIndex);
+        const currentFrameId = s.currentBranchPath[index];
+        const current = getFrameById(s.play, currentFrameId);
+        if (!current) return;
+        const next = computeNextFrame(s.play, current);
         if (!next) return;
+        next.parentId = current.id;
+        next.nextFrameIds = [];
         s.play.frames.push(next);
-        s.currentFrameIndex = s.play.frames.length - 1;
+        const siblings = Array.isArray(current.nextFrameIds) ? current.nextFrameIds : [];
+        if (!siblings.includes(next.id)) {
+          current.nextFrameIds = [...siblings, next.id];
+        }
+        const basePath = s.currentBranchPath.slice(0, index + 1);
+        basePath.push(next.id);
+        s.currentBranchPath = basePath;
+        s.currentFrameIndex = s.currentBranchPath.length - 1;
         s.play.possession = next.possession ?? undefined;
         s.play.meta.updatedAt = new Date().toISOString();
-        s.play.frames[s.currentFrameIndex].arrows = [];
+        s.selectedArrowId = null;
+        s.selectedTokenId = null;
+        const created = getFrameById(s.play, next.id);
+        if (created) {
+          created.arrows = [];
+        }
       });
     },
 
     setCurrentFrameIndex(i) {
       set((s) => {
-        if (!s.play) return;
-        const clamped = Math.max(0, Math.min(i, s.play.frames.length - 1));
+        if (!s.play || !s.currentBranchPath.length) return;
+        const clamped = clampFrameIndex(s.currentBranchPath, i);
         s.currentFrameIndex = clamped;
-        const frame = s.play.frames[clamped];
+        const frameId = s.currentBranchPath[clamped];
+        const frame = getFrameById(s.play, frameId);
         if (frame) {
           s.play.possession = frame.possession ?? undefined;
         }
       });
     },
 
-    deleteLastFrame() {
+    focusFrameById(id) {
       set((s) => {
         if (!s.play) return;
-        if (s.play.frames.length <= 1) return;
-        s.play.frames.pop();
-        s.currentFrameIndex = Math.min(s.currentFrameIndex, s.play.frames.length - 1);
-        const frame = s.play.frames[s.currentFrameIndex];
+        ensureFrameGraph(s.play);
+        const path = buildPathToFrame(s.play, id);
+        if (!path || !path.length) return;
+        s.currentBranchPath = path;
+        s.currentFrameIndex = path.length - 1;
+        const frame = getFrameById(s.play, id);
         if (frame) {
           s.play.possession = frame.possession ?? undefined;
+        }
+        s.selectedArrowId = null;
+        s.selectedTokenId = null;
+      });
+    },
+
+    deleteLastFrame() {
+      set((s) => {
+        if (!s.play || !s.currentBranchPath.length) return;
+        const index = clampFrameIndex(s.currentBranchPath, s.currentFrameIndex);
+        if (index !== s.currentBranchPath.length - 1) return;
+        const frameId = s.currentBranchPath[index];
+        const frame = getFrameById(s.play, frameId);
+        if (!frame) return;
+        if ((frame.nextFrameIds ?? []).length > 0) return;
+        if (!frame.parentId) return;
+        s.play.frames = s.play.frames.filter((f) => f.id !== frame.id);
+        const parent = getFrameById(s.play, frame.parentId);
+        if (parent && Array.isArray(parent.nextFrameIds)) {
+          parent.nextFrameIds = parent.nextFrameIds.filter((id) => id !== frame.id);
+        }
+        s.currentBranchPath = s.currentBranchPath.slice(0, -1);
+        s.currentFrameIndex = s.currentBranchPath.length - 1;
+        if (s.currentFrameIndex < 0) {
+          s.currentFrameIndex = 0;
+        }
+        const currentFrameId =
+          s.currentBranchPath.length > 0 ? s.currentBranchPath[s.currentBranchPath.length - 1] : null;
+        const current = getFrameById(s.play, currentFrameId);
+        if (current) {
+          s.play.possession = current.possession ?? undefined;
         }
         s.play.meta.updatedAt = new Date().toISOString();
       });
@@ -444,82 +530,25 @@ export const usePlayStore = create<StoreState>()(
 
     async stepForward() {
       const s = get();
-      if (!s.play) return;
-      const i = s.currentFrameIndex;
-      const next = i + 1;
-      if (next >= s.play.frames.length) return;
-
-      const from = s.play.frames[i];
-      const to = s.play.frames[next];
+      if (!s.play || !s.currentBranchPath.length) return;
+      const index = clampFrameIndex(s.currentBranchPath, s.currentFrameIndex);
+      const nextIndex = index + 1;
+      if (nextIndex >= s.currentBranchPath.length) return;
+      const fromId = s.currentBranchPath[index];
+      const toId = s.currentBranchPath[nextIndex];
+      const from = getFrameById(s.play, fromId);
+      const to = getFrameById(s.play, toId);
+      if (!from || !to) return;
       const durationMs = s.baseDurationMs / s.speed;
 
-      const arrowsInFrame = from.arrows
-        .map((arrowId) => s.play?.arrowsById[arrowId])
-        .filter((arrow): arrow is Arrow => Boolean(arrow));
-
-      const tokenPaths = new Map<Id, XY[]>();
-      for (const arrow of arrowsInFrame) {
-        if (arrow.kind === "pass") continue;
-        const startPos = from.tokens[arrow.from];
-        const endPos = to.tokens[arrow.from];
-        if (!startPos || !endPos) continue;
-        tokenPaths.set(arrow.from, buildArrowPath(arrow, { start: startPos, end: endPos }));
-      }
-
-      const moves = Object.keys(to.tokens).flatMap((id) => {
-        const a = from.tokens[id];
-        const b = to.tokens[id];
-        if (!a || !b) return [];
-        if (a.x === b.x && a.y === b.y) return [];
-        const path = tokenPaths.get(id);
-        return [{ id, from: a, to: b, path }];
-      });
-
-      const fromPossessionId = from.possession ?? s.play.possession ?? null;
-      const toPossessionId = to.possession ?? fromPossessionId;
-      let ballMove: { from: XY; to: XY; path?: XY[] } | null = null;
-
-      const passArrowForBall = arrowsInFrame.find(
-        (arrow) => arrow.kind === "pass" && arrow.from === fromPossessionId
-      );
-
-      if (passArrowForBall) {
-        const startPos = from.tokens[passArrowForBall.from];
-        const endPosCandidate = passArrowForBall.toTokenId
-          ? to.tokens[passArrowForBall.toTokenId]
-          : passArrowForBall.toPoint;
-        if (startPos && endPosCandidate) {
-          const path = buildArrowPath(passArrowForBall, { start: startPos, end: endPosCandidate });
-          if (path.length >= 2) {
-            const ballPath = path.map((pt) => ballPositionFor(pt));
-            const fromBall = ballPath[0];
-            const toBall = ballPath[ballPath.length - 1];
-            if (fromBall && toBall && (fromBall.x !== toBall.x || fromBall.y !== toBall.y)) {
-              ballMove = { from: fromBall, to: toBall, path: ballPath };
-            }
-          }
-        }
-      }
-
-      if (fromPossessionId) {
-        const fromPos = from.tokens[fromPossessionId];
-        const toPos = toPossessionId ? to.tokens[toPossessionId] : undefined;
-        if (fromPos && toPos) {
-          const start = ballPositionFor(fromPos);
-          const end = ballPositionFor(toPos);
-          if (!ballMove && (start.x !== end.x || start.y !== end.y)) {
-            ballMove = { from: start, to: end };
-          }
-        }
-      }
-
-      await runPlayStep({ moves, durationMs, ballMove });
+      const spec = buildPlayStepSpec(s.play, from, to, durationMs);
+      await runPlayStep(spec);
       set((st) => {
-        st.currentFrameIndex = next;
+        st.currentFrameIndex = nextIndex;
         if (st.play) {
-          const frame = st.play.frames[next];
-          if (frame) {
-            st.play.possession = frame.possession ?? undefined;
+          const target = getFrameById(st.play, toId);
+          if (target) {
+            st.play.possession = target.possession ?? undefined;
           }
         }
       });
@@ -530,14 +559,44 @@ export const usePlayStore = create<StoreState>()(
       set((s) => { s.isPlaying = true; });
 
       try {
-        while (get().isPlaying) {
-          const s = get();
-          if (!s.play) break;
-          if (s.currentFrameIndex >= s.play.frames.length - 1) {
-            set((st) => { st.isPlaying = false; });
-            break;
-          }
-          await get().stepForward();
+        const startState = get();
+        const play = startState.play;
+        if (!play) return;
+        const order = collectPlaybackOrder(play);
+        if (order.length <= 1) return;
+        const currentFrameId = startState.currentBranchPath.length
+          ? startState.currentBranchPath[
+              clampFrameIndex(startState.currentBranchPath, startState.currentFrameIndex)
+            ]
+          : order[0];
+        let startIndex = order.indexOf(currentFrameId ?? order[0]);
+        if (startIndex < 0) startIndex = 0;
+
+        for (let i = startIndex; i < order.length - 1; i += 1) {
+          if (!get().isPlaying) break;
+          const state = get();
+          const activePlay = state.play;
+          if (!activePlay) break;
+          const fromId = order[i];
+          const toId = order[i + 1];
+          const from = getFrameById(activePlay, fromId);
+          const to = getFrameById(activePlay, toId);
+          if (!from || !to) continue;
+          const durationMs = state.baseDurationMs / state.speed;
+          const spec = buildPlayStepSpec(activePlay, from, to, durationMs);
+          await runPlayStep(spec);
+          if (!get().isPlaying) break;
+          set((st) => {
+            if (!st.play) return;
+            const target = getFrameById(st.play, toId);
+            if (!target) return;
+            st.play.possession = target.possession ?? undefined;
+            const path = buildPathToFrame(st.play, toId);
+            if (path) {
+              st.currentBranchPath = path;
+              st.currentFrameIndex = path.length - 1;
+            }
+          });
         }
       } finally {
         set((s) => { s.isPlaying = false; });
@@ -642,13 +701,18 @@ export const usePlayStore = create<StoreState>()(
     importPlayData(raw: unknown) {
       try {
         const parsed = PlaySchema.parse(raw);
+        ensureFrameGraph(parsed);
+        const rootFrame = parsed.frames[0];
+        const rootPath = rootFrame ? buildPathToFrame(parsed, rootFrame.id) ?? [rootFrame.id] : [];
         set((s) => {
           s.play = parsed;
-          s.currentFrameIndex = 0;
+          s.currentBranchPath = rootPath;
+          s.currentFrameIndex = rootPath.length ? rootPath.length - 1 : 0;
           s.courtType = parsed.courtType ?? "half";
           s.selectedTokenId = null;
           s.selectedArrowId = null;
-          const firstFrame = parsed.frames[0];
+          const focusFrameId = rootPath.length ? rootPath[rootPath.length - 1] : rootFrame?.id;
+          const firstFrame = focusFrameId ? getFrameById(parsed, focusFrameId) : rootFrame;
           s.play.possession = firstFrame?.possession ?? parsed.possession;
         });
         return true;
