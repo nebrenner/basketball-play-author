@@ -1,7 +1,9 @@
+import { jsPDF } from "jspdf";
 import { downloadBlob, downloadDataUrl } from "./download";
 import { usePlayStore } from "../../app/store";
 import type Konva from "konva";
-import { collectPlaybackOrder, findFrameById } from "../frames/frameGraph";
+import { collectPlaybackOrder, ensureFrameGraph, findFrameById } from "../frames/frameGraph";
+import type { Frame, Play } from "../../app/types";
 import { buildPlayStepSpec, runPlayStep } from "../frames/playback";
 
 const IMAGE_PIXEL_RATIO = 2;
@@ -10,6 +12,51 @@ const VIDEO_FPS = 60;
 const FIRST_FRAME_HOLD_MS = 2000;
 const TRANSITION_HOLD_MS = 1000;
 const FINAL_FRAME_HOLD_MS = 3000;
+
+type FrameExportEntry = { frame: Frame; label: string };
+
+function collectFrameExportEntries(play: Play): FrameExportEntry[] {
+  ensureFrameGraph(play);
+  const byId = new Map<Frame["id"], Frame>();
+  for (const frame of play.frames) {
+    byId.set(frame.id, frame);
+  }
+
+  const root = play.frames.find((frame) => !frame.parentId) ?? play.frames[0];
+  if (!root) return [];
+
+  const results: FrameExportEntry[] = [];
+  const visited = new Set<Frame["id"]>();
+
+  const visit = (frame: Frame, depth: number) => {
+    if (visited.has(frame.id)) return;
+    visited.add(frame.id);
+    const parent = frame.parentId ? byId.get(frame.parentId) ?? null : null;
+    const parentChildren = parent
+      ? (parent.nextFrameIds ?? [])
+          .map((childId) => byId.get(childId))
+          .filter((child): child is Frame => Boolean(child))
+      : [];
+    let label = `Step ${Math.max(1, depth)}`;
+    if (parent && parentChildren.length > 1) {
+      const optionIndex = parentChildren.findIndex((child) => child.id === frame.id);
+      if (optionIndex >= 0) {
+        label += ` – Option ${optionIndex + 1}`;
+      }
+    }
+    results.push({ frame, label });
+
+    const children = (frame.nextFrameIds ?? [])
+      .map((childId) => byId.get(childId))
+      .filter((child): child is Frame => Boolean(child));
+    for (const child of children) {
+      visit(child, depth + 1);
+    }
+  };
+
+  visit(root, 1);
+  return results;
+}
 
 function wait(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -74,6 +121,133 @@ export async function exportCurrentFrameAsImage(): Promise<void> {
   );
   const dataUrl = stage.toDataURL({ pixelRatio: IMAGE_PIXEL_RATIO });
   downloadDataUrl(dataUrl, filename);
+}
+
+export async function exportPlayAsPdf(): Promise<void> {
+  const initialState = usePlayStore.getState();
+  const stage = initialState.stageRef;
+  const play = initialState.play;
+  if (!stage || !play) {
+    console.warn("Export skipped: stage or play unavailable");
+    return;
+  }
+
+  if (!play.frames.length) {
+    console.warn("Export skipped: play has no frames");
+    return;
+  }
+
+  const entries = collectFrameExportEntries(play);
+  if (!entries.length) {
+    console.warn("Export skipped: unable to determine frames for export");
+    return;
+  }
+
+  const originalIndex = initialState.currentFrameIndex;
+  const originalPath = [...initialState.currentBranchPath];
+  const wasPlaying = initialState.isPlaying;
+  if (wasPlaying) {
+    initialState.pauseAnimation();
+  }
+
+  const pdf = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
+  const pageWidth = pdf.internal.pageSize.getWidth();
+  const pageHeight = pdf.internal.pageSize.getHeight();
+  const margin = 40;
+  const playName = play.meta.name?.trim() || "Untitled Play";
+  const availableWidth = pageWidth - margin * 2;
+
+  const writeHeader = () => {
+    pdf.setFontSize(20);
+    pdf.text(playName, margin, margin);
+  };
+
+  writeHeader();
+
+  try {
+    for (let i = 0; i < entries.length; i += 1) {
+      const { frame, label } = entries[i];
+      if (i > 0) {
+        pdf.addPage();
+        writeHeader();
+      }
+
+      let cursorY = margin + 28;
+      pdf.setFontSize(16);
+      pdf.text(label, margin, cursorY);
+      cursorY += 20;
+
+      usePlayStore.getState().focusFrameById(frame.id);
+      await waitForStage(stage);
+
+      const noteText = frame.note?.trim() ?? "";
+      const noteLines = noteText ? pdf.splitTextToSize(noteText, availableWidth) : [];
+      const estimatedNoteHeight = noteLines.length > 0 ? noteLines.length * 14 : 0;
+
+      let remainingHeight = pageHeight - cursorY - margin - (estimatedNoteHeight > 0 ? estimatedNoteHeight + 12 : 0);
+      if (remainingHeight <= 0) {
+        pdf.addPage();
+        writeHeader();
+        cursorY = margin + 28;
+        pdf.setFontSize(16);
+        pdf.text(label, margin, cursorY);
+        cursorY += 20;
+        remainingHeight = pageHeight - cursorY - margin - (estimatedNoteHeight > 0 ? estimatedNoteHeight + 12 : 0);
+      }
+
+      const stageWidth = stage.width();
+      const stageHeight = stage.height();
+      const aspectRatio = stageHeight > 0 ? stageWidth / stageHeight : 1;
+      let renderHeight = Math.max(100, remainingHeight);
+      let renderWidth = renderHeight * aspectRatio;
+      if (renderWidth > availableWidth) {
+        renderWidth = availableWidth;
+        renderHeight = renderWidth / (aspectRatio || 1);
+      }
+      if (renderHeight > remainingHeight) {
+        renderHeight = remainingHeight;
+        renderWidth = renderHeight * (aspectRatio || 1);
+      }
+      if (!Number.isFinite(renderHeight) || renderHeight <= 0) {
+        renderHeight = Math.max(remainingHeight, 100);
+        renderWidth = renderHeight * (aspectRatio || 1);
+      }
+      if (renderWidth > availableWidth) {
+        renderWidth = availableWidth;
+        renderHeight = renderWidth / (aspectRatio || 1);
+      }
+
+      const imageX = margin + (availableWidth - renderWidth) / 2;
+      const dataUrl = stage.toDataURL({ pixelRatio: IMAGE_PIXEL_RATIO });
+      pdf.addImage(dataUrl, "PNG", imageX, cursorY, renderWidth, renderHeight);
+      cursorY += renderHeight + 16;
+
+      if (noteLines.length > 0) {
+        if (cursorY + estimatedNoteHeight > pageHeight - margin) {
+          pdf.addPage();
+          writeHeader();
+          cursorY = margin + 28;
+          pdf.setFontSize(16);
+          pdf.text(`${label} – Notes`, margin, cursorY);
+          cursorY += 20;
+        }
+        pdf.setFontSize(12);
+        pdf.text(noteLines, margin, cursorY);
+      }
+    }
+
+    const filename = buildFilename(play.meta.name, "playbook", "pdf");
+    const blob = pdf.output("blob");
+    downloadBlob(blob, filename);
+  } finally {
+    if (originalPath.length > 0) {
+      usePlayStore.getState().focusFrameById(originalPath[originalPath.length - 1]);
+      usePlayStore.getState().setCurrentFrameIndex(originalIndex);
+    } else {
+      usePlayStore.getState().setCurrentFrameIndex(originalIndex);
+    }
+    await waitForStage(stage);
+  }
 }
 
 export async function exportAnimationAsVideo(): Promise<void> {
