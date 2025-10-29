@@ -327,14 +327,15 @@ export const usePlayStore = create<StoreState>()(
         const frameId = s.currentBranchPath[index];
         const frame = getFrameById(s.play, frameId);
         if (!frame) return;
-        const value = title.trim();
+        const raw = title;
+        const value = raw.trim();
         if (!value) {
           if (frame.title === undefined) return;
           delete frame.title;
-        } else if (frame.title === value) {
+        } else if (frame.title === raw) {
           return;
         } else {
-          frame.title = value;
+          frame.title = raw;
         }
         s.play.meta.updatedAt = new Date().toISOString();
       });
@@ -347,14 +348,15 @@ export const usePlayStore = create<StoreState>()(
         const frameId = s.currentBranchPath[index];
         const frame = getFrameById(s.play, frameId);
         if (!frame || !frame.parentId) return;
-        const value = label.trim();
+        const raw = label;
+        const value = raw.trim();
         if (!value) {
           if (frame.optionLabel === undefined) return;
           delete frame.optionLabel;
-        } else if (frame.optionLabel === value) {
+        } else if (frame.optionLabel === raw) {
           return;
         } else {
-          frame.optionLabel = value;
+          frame.optionLabel = raw;
         }
         s.play.meta.updatedAt = new Date().toISOString();
       });

@@ -1,5 +1,6 @@
 import React from "react";
 import StageCanvas from "./components/StageCanvas";
+import FrameMetadataEditor from "./components/ui/FrameMetadataEditor";
 import FrameNoteEditor from "./components/ui/FrameNoteEditor";
 import { usePlayStore } from "./app/store";
 import "./main.css";
@@ -280,6 +281,7 @@ const App: React.FC = () => {
 
       <main className="app-main">
         <div className="play-surface">
+          <FrameMetadataEditor />
           <StageCanvas />
           <FrameNoteEditor />
         </div>
