@@ -81,14 +81,34 @@ function getRootFrame(play: Play): Frame | null {
   return root ?? null;
 }
 
+function cloneFrameForGraph(frame: Frame): Frame {
+  return {
+    ...frame,
+    nextFrameIds: Array.isArray(frame.nextFrameIds) ? [...frame.nextFrameIds] : [],
+    parentId: frame.parentId ?? null,
+  };
+}
+
+function clonePlayForGraph(play: Play): Play {
+  return {
+    ...play,
+    frames: play.frames.map(cloneFrameForGraph),
+  };
+}
+
+function needsCloneForGraph(play: Play): boolean {
+  return play.frames.some((frame) => Object.isFrozen(frame));
+}
+
 export function collectPlaybackOrder(play: Play): Id[] {
-  ensureFrameGraph(play);
-  const root = getRootFrame(play);
+  const workingPlay = needsCloneForGraph(play) ? clonePlayForGraph(play) : play;
+  ensureFrameGraph(workingPlay);
+  const root = getRootFrame(workingPlay);
   if (!root) return [];
 
   const order: Id[] = [root.id];
   const byId = new Map<Id, Frame>();
-  for (const frame of play.frames) {
+  for (const frame of workingPlay.frames) {
     byId.set(frame.id, frame);
   }
 
