@@ -7,7 +7,7 @@ import { advanceFrame as computeNextFrame } from "../features/frames/frameEngine
 import { buildPlayStepSpec, runPlayStep } from "../features/frames/playback";
 import { buildArrowPath } from "../features/arrows/arrowUtils";
 import { ensureFrameGraph, findFrameById, buildPathToFrame, collectPlaybackOrder } from "../features/frames/frameGraph";
-import { TOKEN_RADIUS, ballPositionFor } from "../features/tokens/tokenGeometry";
+import { TOKEN_RADIUS } from "../features/tokens/tokenGeometry";
 import { COURT_PADDING } from "../constants/court";
 import { PlaySchema } from "./schema";
 
