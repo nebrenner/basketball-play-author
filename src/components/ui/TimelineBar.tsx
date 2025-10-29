@@ -23,6 +23,7 @@ const TimelineBar: React.FC = () => {
   const play = usePlayStore((s) => s.play);
   const setIndex = usePlayStore((s) => s.setCurrentFrameIndex);
   const deleteLast = usePlayStore((s) => s.deleteLastFrame);
+  const advanceFrame = usePlayStore((s) => s.advanceFrame);
 
   const total = play?.frames.length ?? 0;
   if (!play) return null;
@@ -46,7 +47,14 @@ const TimelineBar: React.FC = () => {
       </Btn>
 
       <div style={{ flex: 1 }} />
-      <Btn onClick={deleteLast} disabled={total <= 1} title="Delete last frame (keeps at least 1)">Delete Last</Btn>
+      <div style={{ display: "flex", gap: 8 }}>
+        <Btn onClick={deleteLast} disabled={total <= 1} title="Delete last frame (keeps at least 1)">
+          Delete Last
+        </Btn>
+        <Btn onClick={advanceFrame} title="Advance to next frame by applying current arrows">
+          Next Step ➜
+        </Btn>
+      </div>
     </div>
   );
 };

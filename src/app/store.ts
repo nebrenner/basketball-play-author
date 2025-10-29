@@ -66,6 +66,7 @@ type StoreState = {
   savePlay: () => void;
   savePlayAsCopy: () => void;
   loadPlay: (id: string) => boolean;
+  importPlayData: (raw: unknown) => boolean;
   listLocalPlays: () => Array<{ id: string; name: string; updatedAt: string }>;
   deletePlay: (id: string) => void;
 };
@@ -615,7 +616,16 @@ export const usePlayStore = create<StoreState>()(
       if (!raw) return false;
       try {
         const data = JSON.parse(raw);
-        const parsed = PlaySchema.parse(data);
+        return get().importPlayData(data);
+      } catch (e) {
+        console.error("Load failed:", e);
+        return false;
+      }
+    },
+
+    importPlayData(raw: unknown) {
+      try {
+        const parsed = PlaySchema.parse(raw);
         set((s) => {
           s.play = parsed;
           s.currentFrameIndex = 0;
@@ -627,7 +637,7 @@ export const usePlayStore = create<StoreState>()(
         });
         return true;
       } catch (e) {
-        console.error("Load failed:", e);
+        console.error("Import failed:", e);
         return false;
       }
     },

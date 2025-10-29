@@ -16,7 +16,9 @@ const App: React.FC = () => {
   const setPlayName = usePlayStore((s) => s.setPlayName);
   const deletePlay = usePlayStore((s) => s.deletePlay);
   const storageRevision = usePlayStore((s) => s.storageRevision);
+  const importPlayData = usePlayStore((s) => s.importPlayData);
   const [plays, setPlays] = React.useState(() => list());
+  const fileInputRef = React.useRef<HTMLInputElement | null>(null);
 
   React.useEffect(() => {
     setPlays(list());
@@ -55,6 +57,64 @@ const App: React.FC = () => {
     deletePlay(selectedPlayId);
     setSelectedPlayId("");
   }, [deletePlay, plays, selectedPlayId]);
+
+  const handleExport = React.useCallback(() => {
+    if (!play) return;
+    const serialized = JSON.stringify(play, null, 2);
+    const blob = new Blob([serialized], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const safeName = play.meta.name
+      .trim()
+      .toLowerCase()
+      .replace(/[^a-z0-9\s_-]/g, "")
+      .replace(/\s+/g, "-");
+    const filename = `${safeName || "play"}.json`;
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }, [play]);
+
+  const handleImportClick = React.useCallback(() => {
+    fileInputRef.current?.click();
+  }, []);
+
+  const handleImport = React.useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      if (!file) {
+        event.target.value = "";
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const text = typeof reader.result === "string" ? reader.result : "";
+          const data = JSON.parse(text);
+          const ok = importPlayData(data);
+          if (!ok) {
+            window.alert("Import failed. Please ensure the file is a valid exported play.");
+          }
+        } catch (error) {
+          console.error("Import failed:", error);
+          window.alert("Import failed. Please ensure the file is a valid exported play.");
+        } finally {
+          event.target.value = "";
+        }
+      };
+      reader.onerror = (err) => {
+        console.error("Import failed:", err);
+        window.alert("Import failed while reading the file.");
+        event.target.value = "";
+      };
+      reader.readAsText(file);
+    },
+    [importPlayData],
+  );
 
   return (
     <div className="app-root">
@@ -161,6 +221,41 @@ const App: React.FC = () => {
           >
             Delete
           </button>
+          <span style={{ color: "#94a3b8", fontSize: 12 }}>Snap: On</span>
+          <button
+            onClick={handleExport}
+            disabled={!play}
+            style={{
+              padding: "6px 10px",
+              borderRadius: 8,
+              border: "1px solid #374151",
+              background: play ? "#0b1220" : "#111827",
+              color: "#e5e7eb",
+              opacity: play ? 1 : 0.5,
+              cursor: play ? "pointer" : "not-allowed",
+            }}
+          >
+            Export
+          </button>
+          <button
+            onClick={handleImportClick}
+            style={{
+              padding: "6px 10px",
+              borderRadius: 8,
+              border: "1px solid #374151",
+              background: "#0b1220",
+              color: "#e5e7eb",
+            }}
+          >
+            Import
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="application/json"
+            style={{ display: "none" }}
+            onChange={handleImport}
+          />
         </div>
         <div style={{ flex: 1 }}>
           <Toolbar />
