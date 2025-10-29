@@ -1,17 +1,57 @@
 import type { ArrowKind } from "../../app/types";
 
-export const styleFor = (kind: ArrowKind) => {
+export type ArrowStyle = {
+  stroke: string;
+  strokeWidth: number;
+  dash?: number[];
+  /** Whether the main glyph should include an arrow head. */
+  drawPointer: boolean;
+  pointerLength?: number;
+  pointerWidth?: number;
+  /** Optional decorative T-cap dimensions for screen arrows. */
+  tCap?: { width: number; offset: number };
+  /** Optional path effects (e.g. dribble wave). */
+  pathEffect?: "wavy";
+};
+
+export const styleFor = (kind: ArrowKind): ArrowStyle => {
   switch (kind) {
     case "cut":
-      return { stroke: "#eab308", strokeWidth: 3, dash: undefined as number[] | undefined, pointerLength: 12, pointerWidth: 12, bezier: false };
+      return {
+        stroke: "#000000",
+        strokeWidth: 3,
+        dash: undefined,
+        drawPointer: true,
+        pointerLength: 12,
+        pointerWidth: 12,
+      };
     case "dribble":
-      return { stroke: "#22d3ee", strokeWidth: 3, dash: [8, 8], pointerLength: 12, pointerWidth: 12, bezier: false };
+      return {
+        stroke: "#000000",
+        strokeWidth: 3,
+        dash: undefined,
+        drawPointer: true,
+        pointerLength: 12,
+        pointerWidth: 12,
+        pathEffect: "wavy",
+      };
     case "screen":
-      // draw as solid line with arrowhead; add T-cap separately if desired
-      return { stroke: "#86efac", strokeWidth: 3, dash: undefined, pointerLength: 12, pointerWidth: 12, bezier: false };
+      return {
+        stroke: "#000000",
+        strokeWidth: 3,
+        dash: undefined,
+        drawPointer: false,
+        tCap: { width: 28, offset: 0 },
+      };
     case "pass":
-      // curved dashed arc
-      return { stroke: "#f472b6", strokeWidth: 3, dash: [12, 8], pointerLength: 12, pointerWidth: 12, bezier: false };
+      return {
+        stroke: "#000000",
+        strokeWidth: 3,
+        dash: [2, 10],
+        drawPointer: true,
+        pointerLength: 12,
+        pointerWidth: 12,
+      };
     default: {
       const exhaustiveCheck: never = kind;
       throw new Error(`Unhandled arrow kind: ${exhaustiveCheck}`);
