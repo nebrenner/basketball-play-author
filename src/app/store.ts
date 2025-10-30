@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
 import { nanoid } from "nanoid";
 import type Konva from "konva";
+import type { Draft } from "immer";
 import type { Play, Token, Frame, Id, XY, ArrowKind, CourtType, Arrow } from "./types";
 import { advanceFrame as computeNextFrame } from "../features/frames/frameEngine";
 import { buildPlayStepSpec, runPlayStep } from "../features/frames/playback";
@@ -23,6 +24,7 @@ type StoreState = {
   currentBranchPath: Id[];
   storageRevision: number;
   snapToGrid: boolean;
+  hasUnsavedChanges: boolean;
   selectedTokenId: Id | null;
   selectedArrowId: Id | null;
   stageRef: Konva.Stage | null;
@@ -76,6 +78,12 @@ type StoreState = {
   importPlayData: (raw: unknown) => boolean;
   listLocalPlays: () => Array<{ id: string; name: string; updatedAt: string }>;
   deletePlay: (id: string) => void;
+};
+
+const markPlayDirty = (state: Draft<StoreState>, timestamp?: string) => {
+  if (!state.play) return;
+  state.play.meta.updatedAt = timestamp ?? new Date().toISOString();
+  state.hasUnsavedChanges = true;
 };
 
 const makeDefaultTokens = (): Token[] => [
@@ -177,6 +185,7 @@ export const usePlayStore = create<StoreState>()(
     currentBranchPath: [],
     storageRevision: 0,
     snapToGrid: true,
+    hasUnsavedChanges: false,
     selectedTokenId: null,
     selectedArrowId: null,
     stageRef: null,
@@ -209,7 +218,7 @@ export const usePlayStore = create<StoreState>()(
             frame.tokens = defaultPositions(s.stageWidth, s.stageHeight, type);
             frame.possession = frame.possession ?? s.play.possession;
           }
-          s.play.meta.updatedAt = new Date().toISOString();
+          markPlayDirty(s);
         }
       });
     },
@@ -248,6 +257,7 @@ export const usePlayStore = create<StoreState>()(
         s.currentBranchPath = [frame0.id];
         s.selectedTokenId = null;
         s.selectedArrowId = null;
+        s.hasUnsavedChanges = false;
       });
     },
 
@@ -256,6 +266,7 @@ export const usePlayStore = create<StoreState>()(
         if (!s.play) return;
         if (s.play.meta.name === name) return;
         s.play.meta.name = name;
+        markPlayDirty(s);
       });
     },
 
@@ -267,7 +278,7 @@ export const usePlayStore = create<StoreState>()(
         const frame = getFrameById(s.play, frameId);
         if (!frame) return;
         frame.tokens[tokenId] = snap({ x: xy.x, y: xy.y }, s.snapToGrid);
-        s.play.meta.updatedAt = new Date().toISOString();
+        markPlayDirty(s);
       });
     },
 
@@ -298,7 +309,7 @@ export const usePlayStore = create<StoreState>()(
         if (!frame) return;
         s.play.possession = id ?? undefined;
         frame.possession = id ?? undefined;
-        s.play.meta.updatedAt = new Date().toISOString();
+        markPlayDirty(s);
       });
     },
 
@@ -316,7 +327,7 @@ export const usePlayStore = create<StoreState>()(
         } else {
           frame.note = value;
         }
-        s.play.meta.updatedAt = new Date().toISOString();
+        markPlayDirty(s);
       });
     },
 
@@ -337,7 +348,7 @@ export const usePlayStore = create<StoreState>()(
         } else {
           frame.title = raw;
         }
-        s.play.meta.updatedAt = new Date().toISOString();
+        markPlayDirty(s);
       });
     },
 
@@ -381,7 +392,7 @@ export const usePlayStore = create<StoreState>()(
         };
         s.play.arrowsById[id] = arrow;
         frame.arrows.push(id);
-        s.play.meta.updatedAt = new Date().toISOString();
+        markPlayDirty(s);
         s.selectedArrowId = id;
         s.selectedTokenId = null;
       });
@@ -432,7 +443,7 @@ export const usePlayStore = create<StoreState>()(
         }
         arrow.points = path;
 
-        s.play.meta.updatedAt = new Date().toISOString();
+        markPlayDirty(s);
       });
     },
 
@@ -459,7 +470,7 @@ export const usePlayStore = create<StoreState>()(
         }
 
         arrow.points = path;
-        s.play.meta.updatedAt = new Date().toISOString();
+        markPlayDirty(s);
       });
     },
 
@@ -474,7 +485,7 @@ export const usePlayStore = create<StoreState>()(
         if (s.selectedArrowId === arrowId) {
           s.selectedArrowId = null;
         }
-        s.play.meta.updatedAt = new Date().toISOString();
+        markPlayDirty(s);
       });
     },
 
@@ -501,7 +512,7 @@ export const usePlayStore = create<StoreState>()(
         s.currentBranchPath = basePath;
         s.currentFrameIndex = s.currentBranchPath.length - 1;
         s.play.possession = next.possession ?? undefined;
-        s.play.meta.updatedAt = new Date().toISOString();
+        markPlayDirty(s);
         s.selectedArrowId = null;
         s.selectedTokenId = null;
         const created = getFrameById(s.play, next.id);
@@ -554,7 +565,7 @@ export const usePlayStore = create<StoreState>()(
         s.currentBranchPath = basePath;
         s.currentFrameIndex = s.currentBranchPath.length - 1;
         play.possession = first.possession ?? undefined;
-        play.meta.updatedAt = new Date().toISOString();
+        markPlayDirty(s);
         s.selectedArrowId = null;
         s.selectedTokenId = null;
       });
@@ -616,7 +627,7 @@ export const usePlayStore = create<StoreState>()(
         if (current) {
           s.play.possession = current.possession ?? undefined;
         }
-        s.play.meta.updatedAt = new Date().toISOString();
+        markPlayDirty(s);
       });
     },
 
@@ -742,6 +753,7 @@ export const usePlayStore = create<StoreState>()(
       persistPlay(parsed.data);
       set((s) => {
         s.storageRevision += 1;
+        s.hasUnsavedChanges = false;
       });
       console.info("Play saved:", parsed.data.id);
     },
@@ -811,6 +823,7 @@ export const usePlayStore = create<StoreState>()(
           const focusFrameId = rootPath.length ? rootPath[rootPath.length - 1] : rootFrame?.id;
           const firstFrame = focusFrameId ? getFrameById(parsed, focusFrameId) : rootFrame;
           s.play.possession = firstFrame?.possession ?? parsed.possession;
+          s.hasUnsavedChanges = false;
         });
         return true;
       } catch (e) {
