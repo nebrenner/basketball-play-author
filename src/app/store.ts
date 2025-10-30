@@ -46,7 +46,6 @@ type StoreState = {
   setPossession: (id: Id | null) => void;
   setCurrentFrameNote: (note: string) => void;
   setCurrentFrameTitle: (title: string) => void;
-  setCurrentFrameOptionLabel: (label: string) => void;
 
   // arrow authoring
   createArrow: (kind: ArrowKind, fromTokenId: Id) => void;
@@ -56,6 +55,7 @@ type StoreState = {
 
   // frames
   advanceFrame: () => void;
+  branchFrame: () => void;
   setCurrentFrameIndex: (i: number) => void;
   focusFrameById: (id: Id) => void;
   deleteLastFrame: () => void;
@@ -341,27 +341,6 @@ export const usePlayStore = create<StoreState>()(
       });
     },
 
-    setCurrentFrameOptionLabel(label) {
-      set((s) => {
-        if (!s.play) return;
-        const index = clampFrameIndex(s.currentBranchPath, s.currentFrameIndex);
-        const frameId = s.currentBranchPath[index];
-        const frame = getFrameById(s.play, frameId);
-        if (!frame || !frame.parentId) return;
-        const raw = label;
-        const value = raw.trim();
-        if (!value) {
-          if (frame.optionLabel === undefined) return;
-          delete frame.optionLabel;
-        } else if (frame.optionLabel === raw) {
-          return;
-        } else {
-          frame.optionLabel = raw;
-        }
-        s.play.meta.updatedAt = new Date().toISOString();
-      });
-    },
-
     // ---- Arrow authoring ----
     createArrow(kind, fromTokenId) {
       set((s) => {
@@ -529,6 +508,55 @@ export const usePlayStore = create<StoreState>()(
         if (created) {
           created.arrows = [];
         }
+      });
+    },
+
+    branchFrame() {
+      set((s) => {
+        const play = s.play;
+        if (!play) return;
+        if (!s.currentBranchPath.length) return;
+        const index = clampFrameIndex(s.currentBranchPath, s.currentFrameIndex);
+        const currentFrameId = s.currentBranchPath[index];
+        const current = getFrameById(play, currentFrameId);
+        if (!current) return;
+
+        const ensureSiblingsArray = (): Id[] => {
+          if (!Array.isArray(current.nextFrameIds)) {
+            current.nextFrameIds = [];
+          }
+          return current.nextFrameIds;
+        };
+
+        const createChild = (): Frame | null => {
+          const next = computeNextFrame(play, current);
+          if (!next) return null;
+          next.parentId = current.id;
+          next.nextFrameIds = [];
+          play.frames.push(next);
+          const siblings = ensureSiblingsArray();
+          if (!siblings.includes(next.id)) {
+            siblings.push(next.id);
+          }
+          const created = getFrameById(play, next.id);
+          if (created) {
+            created.arrows = [];
+          }
+          return next;
+        };
+
+        const first = createChild();
+        const second = createChild();
+        if (!first || !second) return;
+
+        const basePath = s.currentBranchPath.slice(0, index + 1);
+        basePath.push(first.id);
+        s.currentBranchPath = basePath;
+        s.currentFrameIndex = s.currentBranchPath.length - 1;
+        play.possession = first.possession ?? undefined;
+        play.meta.updatedAt = new Date().toISOString();
+        s.selectedArrowId = null;
+        s.selectedTokenId = null;
       });
     },
 

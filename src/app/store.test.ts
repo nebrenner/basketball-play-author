@@ -124,9 +124,8 @@ describe("usePlayStore", () => {
     expect(after.play?.frames[0]?.tokens.P1?.x).not.toBeCloseTo(beforeP1X);
   });
 
-  it("lets the user set custom step and option labels", () => {
-    const { initDefaultPlay, setCurrentFrameTitle, advanceFrame, setCurrentFrameOptionLabel } =
-      usePlayStore.getState();
+  it("lets the user set custom step labels", () => {
+    const { initDefaultPlay, setCurrentFrameTitle } = usePlayStore.getState();
 
     initDefaultPlay("Test Play");
     setCurrentFrameTitle("Opening Alignment");
@@ -140,17 +139,32 @@ describe("usePlayStore", () => {
     state = usePlayStore.getState();
     frame = currentFrameOf(state);
     expect(frame?.title).toBeUndefined();
+  });
 
-    advanceFrame();
-    setCurrentFrameOptionLabel("Swing Pass");
+  it("creates two children when branching from the current step", () => {
+    const { initDefaultPlay, branchFrame } = usePlayStore.getState();
 
-    state = usePlayStore.getState();
-    frame = currentFrameOf(state);
-    expect(frame?.optionLabel).toBe("Swing Pass");
+    initDefaultPlay("Test Play");
+    branchFrame();
 
-    setCurrentFrameOptionLabel("");
-    state = usePlayStore.getState();
-    frame = currentFrameOf(state);
-    expect(frame?.optionLabel).toBeUndefined();
+    const state = usePlayStore.getState();
+    const play = state.play;
+    expect(play?.frames).toHaveLength(3);
+
+    const rootFrame = play?.frames[0];
+    expect(rootFrame?.nextFrameIds).toHaveLength(2);
+
+    const [firstChildId, secondChildId] = rootFrame?.nextFrameIds ?? [];
+    expect(firstChildId).toBeDefined();
+    expect(secondChildId).toBeDefined();
+    expect(firstChildId).not.toBe(secondChildId);
+
+    const firstChild = play?.frames.find((frame) => frame.id === firstChildId);
+    const secondChild = play?.frames.find((frame) => frame.id === secondChildId);
+    expect(firstChild?.parentId).toBe(rootFrame?.id ?? null);
+    expect(secondChild?.parentId).toBe(rootFrame?.id ?? null);
+
+    expect(state.currentBranchPath.length).toBe(2);
+    expect(state.currentBranchPath[1]).toBe(firstChildId);
   });
 });

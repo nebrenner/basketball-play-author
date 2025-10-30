@@ -17,7 +17,6 @@ export type Frame = {
   tokens: Record<Id, XY>; // token positions at this frame
   arrows: Id[]; // which arrows to render during this step
   title?: string;
-  optionLabel?: string;
   note?: string;
   possession?: Id;
   parentId?: Id | null;
