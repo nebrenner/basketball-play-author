@@ -63,7 +63,6 @@ const StageCanvas: React.FC = () => {
   const setStageRef = usePlayStore((s) => s.setStageRef);
 
   const hasWidth = width > 0;
-  const scale = hasWidth ? width / stageWidth : 1;
 
   const selectedTokenPosition = React.useMemo<XY | null>(() => {
     if (!selectedTokenId || !currentFrame) return null;
@@ -144,13 +143,13 @@ const StageCanvas: React.FC = () => {
   const showArrowMenu = selectedTokenPosition && allowedArrowKinds.length > 0;
   const menuPosition = React.useMemo(() => {
     if (!selectedTokenPosition) return null;
-    const left = padding + selectedTokenPosition.x * scale + 16;
-    const top = padding + selectedTokenPosition.y * scale - 56;
+    const left = padding + selectedTokenPosition.x + 16;
+    const top = padding + selectedTokenPosition.y - 56;
     return {
       left,
       top: Math.max(padding, top),
     };
-  }, [selectedTokenPosition, scale]);
+  }, [selectedTokenPosition]);
 
   return (
     <div className="canvas-wrap" ref={ref}>
@@ -159,7 +158,6 @@ const StageCanvas: React.FC = () => {
           <Stage
             width={stageWidth}
             height={stageHeight}
-            scale={{ x: scale, y: scale }}
             className="stage-root"
             onMouseDown={handleStageMouseDown}
             ref={handleStageRef}

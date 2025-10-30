@@ -9,7 +9,6 @@ import { buildPlayStepSpec, runPlayStep } from "../features/frames/playback";
 import { buildArrowPath } from "../features/arrows/arrowUtils";
 import { ensureFrameGraph, findFrameById, buildPathToFrame, collectPlaybackOrder } from "../features/frames/frameGraph";
 import { TOKEN_RADIUS } from "../features/tokens/tokenGeometry";
-import { COURT_PADDING } from "../constants/court";
 import { PlaySchema } from "./schema";
 
 type PlayIndexEntry = { id: string; name: string; updatedAt: string };
@@ -94,20 +93,11 @@ const makeDefaultTokens = (): Token[] => [
   { id: "P5", kind: "P5", label: "5" },
 ];
 
-const OLD_COURT_PADDING = 10;
-
 const defaultPositions = (W: number, H: number, courtType: CourtType): Record<Id, XY> => {
-  const normalize = (value: number, total: number) => {
-    const oldPlayable = total - OLD_COURT_PADDING * 2;
-    if (oldPlayable <= 0) return value;
-    const normalized = (value - OLD_COURT_PADDING) / oldPlayable;
-    const clamped = Math.max(0, Math.min(1, normalized));
-    return COURT_PADDING + clamped * (total - COURT_PADDING * 2);
-  };
 
   const position = (rx: number, ry: number) => ({
-    x: normalize(W * rx, W),
-    y: normalize(H * ry, H),
+    x: W * rx,
+    y: H * ry,
   });
 
   if (courtType === "full") {
