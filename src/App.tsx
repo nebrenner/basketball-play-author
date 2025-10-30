@@ -2,6 +2,7 @@ import React from "react";
 import StageCanvas from "./components/StageCanvas";
 import FrameMetadataEditor from "./components/ui/FrameMetadataEditor";
 import FrameNoteEditor from "./components/ui/FrameNoteEditor";
+import FrameTreePanel from "./components/ui/FrameTreePanel";
 import { usePlayStore } from "./app/store";
 import "./main.css";
 import Toolbar from "./components/ui/Toolbar";
@@ -282,8 +283,13 @@ const App: React.FC = () => {
       <main className="app-main">
         <div className="play-surface">
           <FrameMetadataEditor />
-          <StageCanvas />
-          <FrameNoteEditor />
+          <div className="play-layout">
+            <div className="play-main">
+              <StageCanvas />
+              <FrameNoteEditor />
+            </div>
+            <FrameTreePanel />
+          </div>
         </div>
       </main>
     </div>
