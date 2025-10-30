@@ -226,11 +226,10 @@ export async function exportPlayAsPdf(): Promise<void> {
 
       const stageWidth = stage.width();
       const stageHeight = stage.height();
-      const captureMargin = Math.max(0, COURT_PADDING - 2);
-      const captureX = captureMargin;
-      const captureY = captureMargin;
-      const captureWidth = Math.max(1, stageWidth - captureMargin * 2);
-      const captureHeight = Math.max(1, stageHeight - captureMargin * 2);
+      const captureX = COURT_PADDING;
+      const captureY = COURT_PADDING;
+      const captureWidth = Math.max(1, stageWidth - COURT_PADDING * 2);
+      const captureHeight = Math.max(1, stageHeight - COURT_PADDING * 2);
       const aspectRatio = captureHeight > 0 ? captureWidth / captureHeight : 1;
       let renderHeight = Math.max(100, remainingHeight);
       let renderWidth = renderHeight * aspectRatio;
