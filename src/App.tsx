@@ -44,8 +44,11 @@ const App: React.FC = () => {
   }, [save]);
 
   const handleSaveCopy = React.useCallback(() => {
-    saveCopy();
-  }, [saveCopy]);
+    const newId = saveCopy();
+    if (newId) {
+      setSelectedPlayId(newId);
+    }
+  }, [saveCopy, setSelectedPlayId]);
 
   const handleLoad = React.useCallback(() => {
     if (!selectedPlayId) return;
