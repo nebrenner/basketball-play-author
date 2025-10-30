@@ -5,7 +5,7 @@ import { Stage, Layer } from "react-konva";
 import { usePlayStore } from "../app/store";
 import type { ArrowKind, XY } from "../app/types";
 import CourtLayer from "./layers/CourtLayer";
-import ArrowLayer from "./layers/ArrowLayer";
+import ArrowLayer, { ArrowOverlayLayer } from "./layers/ArrowLayer";
 import TokenLayer from "./layers/TokenLayer";
 import "./../main.css";
 
@@ -174,6 +174,10 @@ const StageCanvas: React.FC = () => {
 
             <Layer>
               <TokenLayer />
+            </Layer>
+
+            <Layer listening={false}>
+              <ArrowOverlayLayer />
             </Layer>
           </Stage>
 
