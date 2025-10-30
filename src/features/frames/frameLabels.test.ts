@@ -39,7 +39,7 @@ describe("computeStepLabels", () => {
     expect(labels.get("f3")).toBe("3");
   });
 
-  it("alternates letter and number segments through branches", () => {
+  it("continues sequences at the same depth until a branch occurs", () => {
     const frames: Frame[] = [
       createFrame("f1", null, ["f2"]),
       createFrame("f2", "f1", ["f3", "f4"]),
@@ -57,9 +57,9 @@ describe("computeStepLabels", () => {
     expect(labels.get("f2")).toBe("2");
     expect(labels.get("f3")).toBe("2a");
     expect(labels.get("f4")).toBe("2b");
-    expect(labels.get("f5")).toBe("2a1");
-    expect(labels.get("f6")).toBe("2a1a");
-    expect(labels.get("f7")).toBe("2a1b");
+    expect(labels.get("f5")).toBe("2c");
+    expect(labels.get("f6")).toBe("2c1");
+    expect(labels.get("f7")).toBe("2c2");
   });
 
   it("integrates with defaultStepTitle to build labels", () => {
