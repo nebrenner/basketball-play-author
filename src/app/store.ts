@@ -73,7 +73,7 @@ type StoreState = {
 
   // persistence
   savePlay: () => void;
-  savePlayAsCopy: () => void;
+  savePlayAsCopy: () => string | null;
   loadPlay: (id: string) => boolean;
   importPlayData: (raw: unknown) => boolean;
   listLocalPlays: () => Array<{ id: string; name: string; updatedAt: string }>;
@@ -761,7 +761,7 @@ export const usePlayStore = create<StoreState>()(
     savePlayAsCopy() {
       const state = get();
       const current = state.play;
-      if (!current) return;
+      if (!current) return null;
 
       const baseName = current.meta.name?.trim() || "New Play";
       const suggestedName = `${baseName} Copy`;
@@ -769,7 +769,7 @@ export const usePlayStore = create<StoreState>()(
       const name = entered?.trim();
       if (!name) {
         console.info("Copy cancelled: name is required");
-        return;
+        return null;
       }
 
       const cloned = JSON.parse(JSON.stringify(current)) as Play;
@@ -785,14 +785,21 @@ export const usePlayStore = create<StoreState>()(
       const parsed = PlaySchema.safeParse(cloned);
       if (!parsed.success) {
         console.error("Copy failed: invalid play", parsed.error);
-        return;
+        return null;
       }
 
       persistPlay(parsed.data);
+      const newId = parsed.data.id;
+      const imported = get().importPlayData(parsed.data);
+      if (!imported) {
+        console.error("Copy failed: unable to load copied play");
+        return null;
+      }
       set((s) => {
         s.storageRevision += 1;
       });
       console.info("Play copied:", parsed.data.id);
+      return newId;
     },
 
     loadPlay(id: string) {
