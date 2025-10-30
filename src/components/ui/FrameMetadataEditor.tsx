@@ -1,16 +1,21 @@
 import React from "react";
 import { usePlayStore } from "../../app/store";
-import { defaultStepTitle } from "../../features/frames/frameLabels";
+import { computeStepLabels, defaultStepTitle } from "../../features/frames/frameLabels";
 
 const FrameMetadataEditor: React.FC = () => {
   const currentFrame = usePlayStore((s) => s.currentFrame());
   const currentFrameIndex = usePlayStore((s) => s.currentFrameIndex);
+  const play = usePlayStore((s) => s.play);
   const title = currentFrame?.title ?? "";
   const hasFrame = Boolean(currentFrame);
   const setTitle = usePlayStore((s) => s.setCurrentFrameTitle);
   const titleInputId = React.useId();
 
-  const stepPlaceholder = hasFrame ? defaultStepTitle(currentFrameIndex + 1) : "No frame selected";
+  const stepLabels = computeStepLabels(play);
+
+  const stepPlaceholder = hasFrame
+    ? defaultStepTitle((currentFrame && stepLabels.get(currentFrame.id)) ?? currentFrameIndex + 1)
+    : "No frame selected";
 
   const handleTitleChange = React.useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
