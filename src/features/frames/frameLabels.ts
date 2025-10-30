@@ -4,9 +4,6 @@ import { buildFrameTree } from "./frameGraph";
 
 const clampIndex = (value: number) => (Number.isFinite(value) && value > 0 ? Math.floor(value) : 1);
 
-const endsWithLetter = (value: string): boolean => /[a-z]$/i.test(value);
-const hasLetter = (value: string): boolean => /[a-z]/i.test(value);
-
 const numberSegment = (index: number): string => String(index + 1);
 
 const letterSegment = (index: number): string => {
@@ -18,13 +15,6 @@ const letterSegment = (index: number): string => {
     n = Math.floor((n - 1) / 26);
   }
   return result;
-};
-
-const nextSegment = (parentLabel: string, index: number): string => {
-  if (endsWithLetter(parentLabel)) {
-    return numberSegment(index);
-  }
-  return letterSegment(index);
 };
 
 const normalizeStepId = (stepId: string | number): string => {
@@ -51,52 +41,70 @@ export const computeStepLabels = (play: Play | null | undefined): Map<Frame["id"
   }
 
   const tree = buildFrameTree(play);
-  const orderIndex = new Map<Frame["id"], number>();
-  play.frames.forEach((frame, index) => {
-    orderIndex.set(frame.id, index + 1);
-  });
-
   const labels = new Map<Frame["id"], string>();
+  const nextIndex = new Map<number, number>();
 
-  const assignNode = (node: FrameTreeNode, label: string) => {
+  const takeIndex = (depth: number): number => {
+    const current = nextIndex.get(depth) ?? 0;
+    nextIndex.set(depth, current + 1);
+    return current;
+  };
+
+  const segmentForDepth = (depth: number, index: number): string => {
+    if (depth % 2 === 1) {
+      return numberSegment(index);
+    }
+    return letterSegment(index);
+  };
+
+  type LabelContext = {
+    segments: string[];
+    depth: number;
+  };
+
+  const setLabel = (node: FrameTreeNode, segments: string[]): void => {
     if (labels.has(node.frame.id)) return;
-    labels.set(node.frame.id, label);
+    labels.set(node.frame.id, segments.join(""));
+  };
 
-    if (!node.children.length) {
-      return;
-    }
+  const assignChildren = (node: FrameTreeNode, context: LabelContext): void => {
+    const children = node.children;
+    if (!children.length) return;
 
-    if (node.children.length > 1) {
-      node.children.forEach((child, index) => {
-        const childLabel = `${label}${nextSegment(label, index)}`;
-        assignNode(child, childLabel);
+    if (children.length > 1) {
+      const nextDepth = context.depth + 1;
+      const childContexts = children.map((child) => {
+        const index = takeIndex(nextDepth);
+        const childSegments = [...context.segments, segmentForDepth(nextDepth, index)];
+        setLabel(child, childSegments);
+        return { child, context: { segments: childSegments, depth: nextDepth } };
       });
+      childContexts.forEach(({ child, context: childContext }) => assignChildren(child, childContext));
       return;
     }
 
-    const [child] = node.children;
+    const [child] = children;
     if (!child) return;
 
-    if (hasLetter(label)) {
-      const childLabel = `${label}${nextSegment(label, 0)}`;
-      assignNode(child, childLabel);
-      return;
-    }
-
-    const sequential = orderIndex.get(child.frame.id);
-    const childLabel = sequential ? String(sequential) : `${label}${nextSegment(label, 0)}`;
-    assignNode(child, childLabel);
+    const index = takeIndex(context.depth);
+    const childSegments = [...context.segments];
+    childSegments[context.depth - 1] = segmentForDepth(context.depth, index);
+    setLabel(child, childSegments);
+    assignChildren(child, { segments: childSegments, depth: context.depth });
   };
 
   const sortedRoots = [...tree].sort((a, b) => {
-    const indexA = orderIndex.get(a.frame.id) ?? 0;
-    const indexB = orderIndex.get(b.frame.id) ?? 0;
+    const indexA = play.frames.findIndex((frame) => frame.id === a.frame.id);
+    const indexB = play.frames.findIndex((frame) => frame.id === b.frame.id);
     return indexA - indexB;
   });
 
-  sortedRoots.forEach((root, index) => {
-    const label = String(index + 1);
-    assignNode(root, label);
+  sortedRoots.forEach((root) => {
+    const depth = 1;
+    const index = takeIndex(depth);
+    const segments = [segmentForDepth(depth, index)];
+    setLabel(root, segments);
+    assignChildren(root, { segments, depth });
   });
 
   return labels;
