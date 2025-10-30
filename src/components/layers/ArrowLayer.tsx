@@ -271,4 +271,33 @@ const ArrowLayer: React.FC = () => {
   );
 };
 
+export const ArrowOverlayLayer: React.FC = () => {
+  const play = usePlayStore((s) => s.play);
+  const curr = usePlayStore((s) => s.currentFrame());
+  const selectedArrowId = usePlayStore((s) => s.selectedArrowId);
+
+  if (!play || !curr) return null;
+
+  const arrows: ArrowType[] = curr.arrows
+    .map((id) => play.arrowsById[id])
+    .filter((a): a is ArrowType => !!a);
+
+  return (
+    <Group listening={false}>
+      {arrows.map((arrow) => {
+        const isSelected = arrow.id === selectedArrowId;
+        const start = getArrowStart(arrow, curr, play);
+        const end = getArrowEnd(arrow, curr);
+        const renderPoints = buildArrowPath(arrow, { start, end });
+
+        return (
+          <Group key={arrow.id} listening={false}>
+            <ArrowGlyph arrow={arrow} emphasize={isSelected} points={renderPoints} />
+          </Group>
+        );
+      })}
+    </Group>
+  );
+};
+
 export default ArrowLayer;
