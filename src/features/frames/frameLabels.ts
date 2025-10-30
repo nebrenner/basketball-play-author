@@ -17,6 +17,9 @@ const letterSegment = (index: number): string => {
   return result;
 };
 
+const segmentForDepth = (depth: number, index: number): string =>
+  depth % 2 === 0 ? numberSegment(index) : letterSegment(index);
+
 const normalizeStepId = (stepId: string | number): string => {
   if (typeof stepId === "number") {
     return String(clampIndex(stepId));
@@ -42,55 +45,16 @@ export const computeStepLabels = (play: Play | null | undefined): Map<Frame["id"
 
   const tree = buildFrameTree(play);
   const labels = new Map<Frame["id"], string>();
-  const nextIndex = new Map<number, number>();
 
-  const takeIndex = (depth: number): number => {
-    const current = nextIndex.get(depth) ?? 0;
-    nextIndex.set(depth, current + 1);
-    return current;
-  };
-
-  const segmentForDepth = (depth: number, index: number): string => {
-    if (depth % 2 === 1) {
-      return numberSegment(index);
-    }
-    return letterSegment(index);
-  };
-
-  type LabelContext = {
-    segments: string[];
-    depth: number;
-  };
-
-  const setLabel = (node: FrameTreeNode, segments: string[]): void => {
-    if (labels.has(node.frame.id)) return;
-    labels.set(node.frame.id, segments.join(""));
-  };
-
-  const assignChildren = (node: FrameTreeNode, context: LabelContext): void => {
-    const children = node.children;
-    if (!children.length) return;
-
-    if (children.length > 1) {
-      const nextDepth = context.depth + 1;
-      const childContexts = children.map((child) => {
-        const index = takeIndex(nextDepth);
-        const childSegments = [...context.segments, segmentForDepth(nextDepth, index)];
-        setLabel(child, childSegments);
-        return { child, context: { segments: childSegments, depth: nextDepth } };
-      });
-      childContexts.forEach(({ child, context: childContext }) => assignChildren(child, childContext));
-      return;
-    }
-
-    const [child] = children;
-    if (!child) return;
-
-    const index = takeIndex(context.depth);
-    const childSegments = [...context.segments];
-    childSegments[context.depth - 1] = segmentForDepth(context.depth, index);
-    setLabel(child, childSegments);
-    assignChildren(child, { segments: childSegments, depth: context.depth });
+  const assign = (nodes: FrameTreeNode[], depth: number, prefix: string): void => {
+    nodes.forEach((node, index) => {
+      const segment = segmentForDepth(depth, index);
+      const label = prefix ? `${prefix}${segment}` : segment;
+      labels.set(node.frame.id, label);
+      if (node.children.length > 0) {
+        assign(node.children, depth + 1, label);
+      }
+    });
   };
 
   const sortedRoots = [...tree].sort((a, b) => {
@@ -99,13 +63,7 @@ export const computeStepLabels = (play: Play | null | undefined): Map<Frame["id"
     return indexA - indexB;
   });
 
-  sortedRoots.forEach((root) => {
-    const depth = 1;
-    const index = takeIndex(depth);
-    const segments = [segmentForDepth(depth, index)];
-    setLabel(root, segments);
-    assignChildren(root, { segments, depth });
-  });
+  assign(sortedRoots, 0, "");
 
   return labels;
 };
