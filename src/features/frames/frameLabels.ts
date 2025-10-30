@@ -17,8 +17,33 @@ const letterSegment = (index: number): string => {
   return result;
 };
 
-const segmentForDepth = (depth: number, index: number): string =>
-  depth % 2 === 0 ? numberSegment(index) : letterSegment(index);
+type StepSegment = {
+  type: "number" | "letter";
+  index: number;
+};
+
+const segmentTypeForDepth = (depth: number): StepSegment["type"] =>
+  depth % 2 === 0 ? "number" : "letter";
+
+const formatSegments = (segments: StepSegment[]): string =>
+  segments
+    .map((segment) =>
+      segment.type === "number" ? numberSegment(segment.index) : letterSegment(segment.index),
+    )
+    .join("");
+
+const nextLinearSegments = (segments: StepSegment[]): StepSegment[] => {
+  if (segments.length === 0) {
+    return [{ type: "number", index: 0 }];
+  }
+
+  const last = segments[segments.length - 1];
+  if (last.type === "number") {
+    return [...segments.slice(0, -1), { ...last, index: last.index + 1 }];
+  }
+
+  return [...segments, { type: "number", index: 0 }];
+};
 
 const normalizeStepId = (stepId: string | number): string => {
   if (typeof stepId === "number") {
@@ -46,15 +71,29 @@ export const computeStepLabels = (play: Play | null | undefined): Map<Frame["id"
   const tree = buildFrameTree(play);
   const labels = new Map<Frame["id"], string>();
 
-  const assign = (nodes: FrameTreeNode[], depth: number, prefix: string): void => {
+  const assignBranch = (nodes: FrameTreeNode[], depth: number, prefix: StepSegment[]): void => {
     nodes.forEach((node, index) => {
-      const segment = segmentForDepth(depth, index);
-      const label = prefix ? `${prefix}${segment}` : segment;
-      labels.set(node.frame.id, label);
-      if (node.children.length > 0) {
-        assign(node.children, depth + 1, label);
-      }
+      const type = segmentTypeForDepth(depth);
+      const segments: StepSegment[] = [...prefix, { type, index }];
+      assignLinear(node, segments);
     });
+  };
+
+  const assignLinear = (node: FrameTreeNode, segments: StepSegment[]): void => {
+    labels.set(node.frame.id, formatSegments(segments));
+
+    const { children } = node;
+    if (children.length === 0) {
+      return;
+    }
+
+    if (children.length > 1) {
+      assignBranch(children, segments.length, segments);
+      return;
+    }
+
+    const [child] = children;
+    assignLinear(child, nextLinearSegments(segments));
   };
 
   const sortedRoots = [...tree].sort((a, b) => {
@@ -63,7 +102,7 @@ export const computeStepLabels = (play: Play | null | undefined): Map<Frame["id"
     return indexA - indexB;
   });
 
-  assign(sortedRoots, 0, "");
+  assignBranch(sortedRoots, 0, []);
 
   return labels;
 };

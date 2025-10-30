@@ -53,13 +53,16 @@ const FrameTreePanel: React.FC = () => {
   const renderTree = (nodes: FrameTreeNode[], depth = 0): React.ReactNode =>
     nodes.map((node) => {
       const frame = node.frame;
-      const defaultId = stepLabels.get(frame.id) ?? orderIndex.get(frame.id) ?? depth + 1;
+      const stepId = stepLabels.get(frame.id);
+      const defaultId = stepId ?? orderIndex.get(frame.id) ?? depth + 1;
       const label = formatStepTitle(frame, defaultId);
       const isActive = frame.id === currentFrameId;
       const isOnPath = pathSet.has(frame.id);
       const branchCount = frame.nextFrameIds?.length ?? 0;
+      const segments = typeof stepId === "string" ? stepId.match(/[a-z]+|\d+/gi) : null;
+      const displayDepth = segments ? Math.max(segments.length - 1, 0) : depth;
       return (
-        <div key={frame.id} className="frame-tree-item" style={{ marginLeft: depth * 14 }}>
+        <div key={frame.id} className="frame-tree-item" style={{ marginLeft: displayDepth * 14 }}>
           <TreeBtn
             onClick={() => focusFrame(frame.id)}
             disabled={isActive}
