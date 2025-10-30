@@ -6,6 +6,7 @@ import { collectPlaybackOrder, ensureFrameGraph, findFrameById } from "../frames
 import type { Frame, Play } from "../../app/types";
 import { buildPlayStepSpec, runPlayStep } from "../frames/playback";
 import { computeStepLabels, formatStepTitle } from "../frames/frameLabels";
+import { COURT_PADDING } from "../../constants/court";
 
 const IMAGE_PIXEL_RATIO = 2;
 const PDF_IMAGE_PIXEL_RATIO = 1.1;
@@ -225,7 +226,12 @@ export async function exportPlayAsPdf(): Promise<void> {
 
       const stageWidth = stage.width();
       const stageHeight = stage.height();
-      const aspectRatio = stageHeight > 0 ? stageWidth / stageHeight : 1;
+      const captureMargin = Math.max(0, COURT_PADDING - 2);
+      const captureX = captureMargin;
+      const captureY = captureMargin;
+      const captureWidth = Math.max(1, stageWidth - captureMargin * 2);
+      const captureHeight = Math.max(1, stageHeight - captureMargin * 2);
+      const aspectRatio = captureHeight > 0 ? captureWidth / captureHeight : 1;
       let renderHeight = Math.max(100, remainingHeight);
       let renderWidth = renderHeight * aspectRatio;
       if (renderWidth > availableWidth) {
@@ -250,6 +256,10 @@ export async function exportPlayAsPdf(): Promise<void> {
         pixelRatio: PDF_IMAGE_PIXEL_RATIO,
         mimeType: PDF_IMAGE_MIME_TYPE,
         quality: PDF_IMAGE_QUALITY,
+        x: captureX,
+        y: captureY,
+        width: captureWidth,
+        height: captureHeight,
       });
       pdf.addImage(dataUrl, "JPEG", imageX, cursorY, renderWidth, renderHeight);
       cursorY += renderHeight + 16;
