@@ -20,6 +20,7 @@ const App: React.FC = () => {
   const deletePlay = usePlayStore((s) => s.deletePlay);
   const storageRevision = usePlayStore((s) => s.storageRevision);
   const importPlayData = usePlayStore((s) => s.importPlayData);
+  const hasUnsavedChanges = usePlayStore((s) => s.hasUnsavedChanges);
   const [plays, setPlays] = React.useState(() => list());
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
 
@@ -39,6 +40,21 @@ const App: React.FC = () => {
     }
   }, [plays, selectedPlayId]);
 
+  React.useEffect(() => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!hasUnsavedChanges) return;
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [hasUnsavedChanges]);
+
+  const confirmDiscardChanges = React.useCallback(() => {
+    if (!hasUnsavedChanges) return true;
+    return window.confirm("You have unsaved changes. Continue without saving?");
+  }, [hasUnsavedChanges]);
+
   const handleSave = React.useCallback(() => {
     save();
   }, [save]);
@@ -49,8 +65,9 @@ const App: React.FC = () => {
 
   const handleLoad = React.useCallback(() => {
     if (!selectedPlayId) return;
+    if (!confirmDiscardChanges()) return;
     load(selectedPlayId);
-  }, [load, selectedPlayId]);
+  }, [confirmDiscardChanges, load, selectedPlayId]);
 
   const handleDelete = React.useCallback(() => {
     if (!selectedPlayId) return;
@@ -82,8 +99,15 @@ const App: React.FC = () => {
   }, [play]);
 
   const handleImportClick = React.useCallback(() => {
+    if (!confirmDiscardChanges()) return;
     fileInputRef.current?.click();
-  }, []);
+  }, [confirmDiscardChanges]);
+
+  const handleCreateNew = React.useCallback(() => {
+    if (!confirmDiscardChanges()) return;
+    init();
+    setSelectedPlayId("");
+  }, [confirmDiscardChanges, init]);
 
   const handleImport = React.useCallback(
     (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -223,6 +247,18 @@ const App: React.FC = () => {
             }}
           >
             Delete
+          </button>
+          <button
+            onClick={handleCreateNew}
+            style={{
+              padding: "6px 10px",
+              borderRadius: 8,
+              border: "1px solid #374151",
+              background: "#0b1220",
+              color: "#e5e7eb",
+            }}
+          >
+            New Play
           </button>
           <span style={{ color: "#94a3b8", fontSize: 12 }}>Snap: On</span>
           <button
