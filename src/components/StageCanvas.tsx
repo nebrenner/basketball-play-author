@@ -20,13 +20,31 @@ const useContainerSize = () => {
   const ref = React.useRef<HTMLDivElement | null>(null);
   const [width, setWidth] = React.useState<number>(0);
 
-  React.useEffect(() => {
-    const resize = () => {
-      if (ref.current) setWidth(ref.current.clientWidth);
-    };
-    resize();
-    window.addEventListener("resize", resize);
-    return () => window.removeEventListener("resize", resize);
+  React.useLayoutEffect(() => {
+    const node = ref.current;
+    if (!node) {
+      return;
+    }
+
+    const measure = () => setWidth(node.clientWidth);
+    measure();
+
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", measure);
+      return () => window.removeEventListener("resize", measure);
+    }
+
+    const observer = new ResizeObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.target === node) {
+          const nextWidth = entry.contentRect.width;
+          setWidth((prev) => (Math.abs(prev - nextWidth) > 0.5 ? nextWidth : prev));
+        }
+      });
+    });
+    observer.observe(node);
+
+    return () => observer.disconnect();
   }, []);
 
   return { ref, width };
@@ -44,7 +62,8 @@ const StageCanvas: React.FC = () => {
   const createArrow = usePlayStore((s) => s.createArrow);
   const setStageRef = usePlayStore((s) => s.setStageRef);
 
-  const scale = width > 0 ? width / stageWidth : 1;
+  const hasWidth = width > 0;
+  const scale = hasWidth ? width / stageWidth : 1;
 
   const selectedTokenPosition = React.useMemo<XY | null>(() => {
     if (!selectedTokenId || !currentFrame) return null;
@@ -135,42 +154,46 @@ const StageCanvas: React.FC = () => {
 
   return (
     <div className="canvas-wrap" ref={ref}>
-      <Stage
-        width={stageWidth}
-        height={stageHeight}
-        scale={{ x: scale, y: scale }}
-        className="stage-root"
-        onMouseDown={handleStageMouseDown}
-        ref={handleStageRef}
-      >
-        <Layer listening={false}>
-          <CourtLayer />
-        </Layer>
+      {hasWidth ? (
+        <>
+          <Stage
+            width={stageWidth}
+            height={stageHeight}
+            scale={{ x: scale, y: scale }}
+            className="stage-root"
+            onMouseDown={handleStageMouseDown}
+            ref={handleStageRef}
+          >
+            <Layer listening={false}>
+              <CourtLayer />
+            </Layer>
 
-        <Layer>
-          <ArrowLayer />
-        </Layer>
+            <Layer>
+              <ArrowLayer />
+            </Layer>
 
-        <Layer>
-          <TokenLayer />
-        </Layer>
-      </Stage>
+            <Layer>
+              <TokenLayer />
+            </Layer>
+          </Stage>
 
-      {showArrowMenu && menuPosition && (
-        <div className="arrow-menu" style={{ left: menuPosition.left, top: menuPosition.top }}>
-          {allowedArrowKinds.map((kind) => (
-            <button
-              key={kind}
-              type="button"
-              disabled={!!arrowFromSelected}
-              onClick={() => selectedTokenId && createArrow(kind, selectedTokenId)}
-              title={arrowFromSelected ? "Delete the existing arrow to add a new one" : undefined}
-            >
-              {ARROW_LABELS[kind]}
-            </button>
-          ))}
-        </div>
-      )}
+          {showArrowMenu && menuPosition && (
+            <div className="arrow-menu" style={{ left: menuPosition.left, top: menuPosition.top }}>
+              {allowedArrowKinds.map((kind) => (
+                <button
+                  key={kind}
+                  type="button"
+                  disabled={!!arrowFromSelected}
+                  onClick={() => selectedTokenId && createArrow(kind, selectedTokenId)}
+                  title={arrowFromSelected ? "Delete the existing arrow to add a new one" : undefined}
+                >
+                  {ARROW_LABELS[kind]}
+                </button>
+              ))}
+            </div>
+          )}
+        </>
+      ) : null}
     </div>
   );
 };
