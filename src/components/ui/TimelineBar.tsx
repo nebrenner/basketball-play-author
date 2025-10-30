@@ -1,7 +1,8 @@
 import React from "react";
 import { usePlayStore } from "../../app/store";
-import { findFrameById } from "../../features/frames/frameGraph";
-import { formatStepTitle } from "../../features/frames/frameLabels";
+import type { FrameTreeNode } from "../../features/frames/frameGraph";
+import { findFrameById, buildFrameTree } from "../../features/frames/frameGraph";
+import { computeStepLabels, formatStepTitle } from "../../features/frames/frameLabels";
 
 const Btn: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement>> = ({ children, ...rest }) => (
   <button
@@ -30,16 +31,19 @@ const TimelineBar: React.FC = () => {
   const advanceFrame = usePlayStore((s) => s.advanceFrame);
   const branchFrame = usePlayStore((s) => s.branchFrame);
 
-  if (!play || path.length === 0) return null;
-
-  const total = path.length;
-  const atFirst = idx <= 0;
-  const atLast = idx >= total - 1;
   const currentFrameId = path[idx];
+  const stepLabels = computeStepLabels(play);
+
+  const orderIndex = new Map<string, number>();
+  play?.frames.forEach((frame, index) => {
+    orderIndex.set(frame.id, index + 1);
+  });
+
   const pathDescriptors = path.map((frameId, index) => {
     const frame = findFrameById(play, frameId);
     const branchCount = frame?.nextFrameIds?.length ?? 0;
-    const label = formatStepTitle(frame ?? undefined, index + 1);
+    const defaultId = stepLabels.get(frameId) ?? orderIndex.get(frameId) ?? index + 1;
+    const label = formatStepTitle(frame ?? undefined, defaultId);
     return { id: frameId, index, branchCount, label };
   });
 
@@ -51,13 +55,65 @@ const TimelineBar: React.FC = () => {
     return (frameAtCursor.nextFrameIds ?? []).length === 0;
   })();
 
-  const allFrames = play.frames.map((frame, index) => {
-    const label = formatStepTitle(frame, index + 1);
+  type RenderNode = {
+    id: string;
+    label: string;
+    isActive: boolean;
+    isOnPath: boolean;
+    branchCount: number;
+    children: RenderNode[];
+  };
+
+  const frameTree: FrameTreeNode[] = play ? buildFrameTree(play) : [];
+
+  const toRenderNode = (node: FrameTreeNode): RenderNode => {
+    const frame = node.frame;
+    const defaultId = stepLabels.get(frame.id) ?? orderIndex.get(frame.id) ?? 1;
+    const label = formatStepTitle(frame, defaultId);
     const isActive = frame.id === currentFrameId;
     const isOnPath = path.includes(frame.id);
     const branchCount = frame.nextFrameIds?.length ?? 0;
-    return { id: frame.id, label, isActive, isOnPath, branchCount };
-  });
+    return {
+      id: frame.id,
+      label,
+      isActive,
+      isOnPath,
+      branchCount,
+      children: node.children.map(toRenderNode),
+    };
+  };
+
+  const allFrames = frameTree.map(toRenderNode);
+
+  if (!play || path.length === 0) return null;
+
+  const total = path.length;
+  const atFirst = idx <= 0;
+  const atLast = idx >= total - 1;
+
+  const renderTree = (nodes: RenderNode[], depth = 0): React.ReactNode =>
+    nodes.map((node) => (
+      <div key={node.id} style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+        <div style={{ marginLeft: depth * 16 }}>
+          <Btn
+            onClick={() => focusFrame(node.id)}
+            disabled={node.isActive}
+            title={
+              node.isActive
+                ? "Currently focused"
+                : node.isOnPath
+                  ? "Jump to this frame"
+                  : "Follow this branch"
+            }
+          >
+            {node.isActive ? `● ${node.label}` : node.label}
+            {node.branchCount > 1 ? ` (${node.branchCount})` : ""}
+            {node.isOnPath && !node.isActive ? " ✓" : ""}
+          </Btn>
+        </div>
+        {node.children.length > 0 ? <div>{renderTree(node.children, depth + 1)}</div> : null}
+      </div>
+    ));
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -119,26 +175,11 @@ const TimelineBar: React.FC = () => {
         ))}
       </div>
 
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
-        <span style={{ color: "#cbd5e1", fontSize: 13 }}>All Frames:</span>
-        {allFrames.map(({ id, label, isActive, isOnPath, branchCount }) => (
-          <Btn
-            key={id}
-            onClick={() => focusFrame(id)}
-            disabled={isActive}
-            title={
-              isActive
-                ? "Currently focused"
-                : isOnPath
-                  ? "Jump to this frame"
-                  : "Follow this branch"
-            }
-          >
-            {isActive ? `● ${label}` : label}
-            {branchCount > 1 ? ` (${branchCount})` : ""}
-            {isOnPath && !isActive ? " ✓" : ""}
-          </Btn>
-        ))}
+      <div style={{ display: "flex", gap: 8, alignItems: "flex-start" }}>
+        <span style={{ color: "#cbd5e1", fontSize: 13, paddingTop: 6 }}>All Frames:</span>
+        <div style={{ display: "flex", flexDirection: "column", gap: 6, flex: 1 }}>
+          {renderTree(allFrames)}
+        </div>
       </div>
     </div>
   );

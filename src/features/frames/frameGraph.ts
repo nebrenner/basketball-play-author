@@ -1,5 +1,10 @@
 import type { Frame, Id, Play } from "../../app/types";
 
+export type FrameTreeNode = {
+  frame: Frame;
+  children: FrameTreeNode[];
+};
+
 export function findFrameById(play: Play | null, id: Id | null | undefined): Frame | undefined {
   if (!play || !id) return undefined;
   return play.frames.find((frame) => frame.id === id);
@@ -125,4 +130,88 @@ export function collectPlaybackOrder(play: Play): Id[] {
 
   visit(root);
   return order;
+}
+
+function buildChildLookup(play: Play) {
+  const byId = new Map<Id, Frame>();
+  const children = new Map<Id, Frame[]>();
+
+  for (const frame of play.frames) {
+    byId.set(frame.id, frame);
+    children.set(frame.id, []);
+  }
+
+  const roots: Frame[] = [];
+
+  for (const frame of play.frames) {
+    const parentId = frame.parentId ?? null;
+    if (parentId && byId.has(parentId)) {
+      children.get(parentId)?.push(frame);
+    } else {
+      roots.push(frame);
+    }
+  }
+
+  for (const frame of play.frames) {
+    const directChildren = children.get(frame.id);
+    if (!directChildren || !directChildren.length) continue;
+
+    const order: Frame[] = [];
+    const seen = new Set<Id>();
+    const nextIds = Array.isArray(frame.nextFrameIds) ? frame.nextFrameIds : [];
+
+    for (const id of nextIds) {
+      const child = byId.get(id);
+      if (!child) continue;
+      if (!directChildren.includes(child)) continue;
+      if (seen.has(child.id)) continue;
+      order.push(child);
+      seen.add(child.id);
+    }
+
+    if (seen.size !== directChildren.length) {
+      const remaining = directChildren
+        .filter((child) => !seen.has(child.id))
+        .sort((a, b) => {
+          const indexA = play.frames.indexOf(a);
+          const indexB = play.frames.indexOf(b);
+          return indexA - indexB;
+        });
+      for (const child of remaining) {
+        order.push(child);
+        seen.add(child.id);
+      }
+    }
+
+    children.set(frame.id, order);
+  }
+
+  const sortedRoots = Array.from(new Set(roots)).sort((a, b) => {
+    const indexA = play.frames.indexOf(a);
+    const indexB = play.frames.indexOf(b);
+    return indexA - indexB;
+  });
+
+  return { byId, children, roots: sortedRoots };
+}
+
+export function buildFrameTree(play: Play): FrameTreeNode[] {
+  if (!play.frames.length) return [];
+
+  const { children, roots } = buildChildLookup(play);
+  const visited = new Set<Id>();
+
+  const buildNode = (frame: Frame): FrameTreeNode => {
+    if (visited.has(frame.id)) {
+      return { frame, children: [] };
+    }
+    visited.add(frame.id);
+    const nextChildren = children.get(frame.id) ?? [];
+    return {
+      frame,
+      children: nextChildren.map(buildNode),
+    };
+  };
+
+  return roots.map(buildNode);
 }
