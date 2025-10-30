@@ -1,7 +1,7 @@
 import React from "react";
 import { usePlayStore } from "../../app/store";
 import { findFrameById } from "../../features/frames/frameGraph";
-import { formatOptionTitle, formatStepTitle } from "../../features/frames/frameLabels";
+import { formatStepTitle } from "../../features/frames/frameLabels";
 
 const Btn: React.FC<React.ButtonHTMLAttributes<HTMLButtonElement>> = ({ children, ...rest }) => (
   <button
@@ -28,6 +28,7 @@ const TimelineBar: React.FC = () => {
   const focusFrame = usePlayStore((s) => s.focusFrameById);
   const deleteCurrent = usePlayStore((s) => s.deleteLastFrame);
   const advanceFrame = usePlayStore((s) => s.advanceFrame);
+  const branchFrame = usePlayStore((s) => s.branchFrame);
 
   if (!play || path.length === 0) return null;
 
@@ -43,15 +44,20 @@ const TimelineBar: React.FC = () => {
   });
 
   const frameAtCursor = play ? findFrameById(play, currentFrameId) : null;
-  const branchOptions = frameAtCursor?.nextFrameIds ?? [];
-
-  const nextActiveId = path[idx + 1] ?? null;
   const canDeleteCurrent = (() => {
     if (!frameAtCursor) return false;
     if (!frameAtCursor.parentId) return false;
     if (idx !== path.length - 1) return false;
     return (frameAtCursor.nextFrameIds ?? []).length === 0;
   })();
+
+  const allFrames = play.frames.map((frame, index) => {
+    const label = formatStepTitle(frame, index + 1);
+    const isActive = frame.id === currentFrameId;
+    const isOnPath = path.includes(frame.id);
+    const branchCount = frame.nextFrameIds?.length ?? 0;
+    return { id: frame.id, label, isActive, isOnPath, branchCount };
+  });
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -83,6 +89,9 @@ const TimelineBar: React.FC = () => {
           >
             Delete Step
           </Btn>
+          <Btn onClick={branchFrame} title="Create two new steps branching from the current frame">
+            Branch Step ⤴
+          </Btn>
           <Btn onClick={advanceFrame} title="Create a new step branching from the current frame">
             New Step ➜
           </Btn>
@@ -96,7 +105,13 @@ const TimelineBar: React.FC = () => {
             key={id}
             onClick={() => setIndex(index)}
             disabled={index === idx}
-            title={branchCount > 1 ? `${branchCount} branch options from this step` : undefined}
+            title={
+              branchCount > 1
+                ? `${branchCount} branches start from this step`
+                : index === idx
+                  ? "Currently focused"
+                  : "Jump to this step"
+            }
           >
             {index === idx ? `● ${label}` : label}
             {branchCount > 1 ? ` (${branchCount})` : ""}
@@ -104,29 +119,27 @@ const TimelineBar: React.FC = () => {
         ))}
       </div>
 
-      {branchOptions.length > 0 && (
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
-          <span style={{ color: "#cbd5e1", fontSize: 13 }}>
-            Branches from this step:
-          </span>
-          {branchOptions.map((childId, optionIndex) => {
-            const isActive = nextActiveId === childId;
-            const childFrame = findFrameById(play, childId);
-            const label = formatOptionTitle(childFrame ?? undefined, optionIndex + 1);
-            return (
-              <Btn
-                key={childId}
-                onClick={() => focusFrame(childId)}
-                disabled={isActive}
-                title={isActive ? "Currently following this branch" : "Follow this branch"}
-              >
-                {label}
-                {isActive ? " ✓" : ""}
-              </Btn>
-            );
-          })}
-        </div>
-      )}
+      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center" }}>
+        <span style={{ color: "#cbd5e1", fontSize: 13 }}>All Frames:</span>
+        {allFrames.map(({ id, label, isActive, isOnPath, branchCount }) => (
+          <Btn
+            key={id}
+            onClick={() => focusFrame(id)}
+            disabled={isActive}
+            title={
+              isActive
+                ? "Currently focused"
+                : isOnPath
+                  ? "Jump to this frame"
+                  : "Follow this branch"
+            }
+          >
+            {isActive ? `● ${label}` : label}
+            {branchCount > 1 ? ` (${branchCount})` : ""}
+            {isOnPath && !isActive ? " ✓" : ""}
+          </Btn>
+        ))}
+      </div>
     </div>
   );
 };
