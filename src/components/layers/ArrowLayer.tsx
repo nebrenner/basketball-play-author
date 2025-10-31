@@ -1,4 +1,5 @@
 import React from "react";
+import type { KonvaEventObject } from "konva/lib/Node";
 import { Group, Arrow as KArrow, Line, Circle, Rect, Text } from "react-konva";
 import { usePlayStore } from "../../app/store";
 import type { Arrow as ArrowType, Id, XY, Frame, Play } from "../../app/types";
@@ -57,6 +58,33 @@ const applyWavyEffect = (points: XY[]): XY[] => {
   samples[samples.length - 1] = points[points.length - 1];
 
   return samples;
+};
+
+const offsetArrowStartFromToken = (arrow: ArrowType, frame: Frame, points: XY[]): XY[] => {
+  if (!frame.tokens[arrow.from] || points.length < 2) return points;
+
+  const [start, next] = points;
+  const dx = next.x - start.x;
+  const dy = next.y - start.y;
+  const distance = Math.hypot(dx, dy);
+  if (distance < 0.001) return points;
+
+  const adjusted = points.map((p) => ({ x: p.x, y: p.y }));
+  adjusted[0] = {
+    x: start.x + (dx / distance) * TOKEN_RADIUS,
+    y: start.y + (dy / distance) * TOKEN_RADIUS,
+  };
+
+  const usesCustomCurve = hasCustomCurve(arrow.points);
+  if (!usesCustomCurve && adjusted.length >= 3) {
+    const end = adjusted[adjusted.length - 1];
+    adjusted[1] = {
+      x: (adjusted[0].x + end.x) / 2,
+      y: (adjusted[0].y + end.y) / 2,
+    };
+  }
+
+  return adjusted;
 };
 
 const ArrowGlyph: React.FC<{ arrow: ArrowType; emphasize?: boolean; points: XY[] }> = ({ arrow, emphasize, points }) => {
@@ -193,13 +221,24 @@ const ArrowLayer: React.FC = () => {
         const isSelected = arrow.id === selectedArrowId;
         const start = getArrowStart(arrow, curr, play);
         const end = getArrowEnd(arrow, curr, start);
-        const renderPoints = buildArrowPath(arrow, { start, end });
+        const renderPath = buildArrowPath(arrow, { start, end });
+        const renderPoints = offsetArrowStartFromToken(arrow, curr, renderPath);
+        const startPoint = renderPoints[0];
         const endPoint = renderPoints[renderPoints.length - 1];
         const controlPoint = renderPoints.length >= 3 ? renderPoints[1] : null;
         const midPoint =
-          start && end
-            ? { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 }
+          startPoint && endPoint
+            ? { x: (startPoint.x + endPoint.x) / 2, y: (startPoint.y + endPoint.y) / 2 }
             : null;
+        const deleteSelectedArrow = () => deleteArrow(arrow.id);
+        const handleDeleteMouse = (ev: KonvaEventObject<MouseEvent>) => {
+          ev.cancelBubble = true;
+          deleteSelectedArrow();
+        };
+        const handleDeleteTap = (ev: KonvaEventObject<TouchEvent>) => {
+          ev.cancelBubble = true;
+          deleteSelectedArrow();
+        };
 
         return (
           <Group
@@ -263,12 +302,19 @@ const ArrowLayer: React.FC = () => {
                 name="arrow-delete"
                 x={midPoint.x + 12}
                 y={midPoint.y - 12}
-                onMouseDown={(ev) => {
-                  ev.cancelBubble = true;
-                  deleteArrow(arrow.id);
-                }}
+                onMouseDown={handleDeleteMouse}
+                onTap={handleDeleteTap}
               >
-                <Rect width={48} height={24} fill="rgba(15,23,42,0.85)" cornerRadius={6} stroke="#ef4444" strokeWidth={1} />
+                <Rect
+                  width={48}
+                  height={24}
+                  fill="rgba(15,23,42,0.85)"
+                  cornerRadius={6}
+                  stroke="#ef4444"
+                  strokeWidth={1}
+                  onMouseDown={handleDeleteMouse}
+                  onTap={handleDeleteTap}
+                />
                 <Text
                   width={48}
                   height={24}
@@ -277,6 +323,8 @@ const ArrowLayer: React.FC = () => {
                   verticalAlign="middle"
                   fill="#fca5a5"
                   fontSize={12}
+                  onMouseDown={handleDeleteMouse}
+                  onTap={handleDeleteTap}
                 />
               </Group>
             )}
@@ -304,7 +352,8 @@ export const ArrowOverlayLayer: React.FC = () => {
         const isSelected = arrow.id === selectedArrowId;
         const start = getArrowStart(arrow, curr, play);
         const end = getArrowEnd(arrow, curr, start);
-        const renderPoints = buildArrowPath(arrow, { start, end });
+        const renderPath = buildArrowPath(arrow, { start, end });
+        const renderPoints = offsetArrowStartFromToken(arrow, curr, renderPath);
 
         return (
           <Group key={arrow.id} listening={false}>
