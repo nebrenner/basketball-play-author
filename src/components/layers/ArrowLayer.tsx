@@ -4,6 +4,7 @@ import { usePlayStore } from "../../app/store";
 import type { Arrow as ArrowType, Id, XY, Frame, Play } from "../../app/types";
 import { styleFor } from "../../features/arrows/arrowStyles";
 import { buildArrowPath, hasCustomCurve } from "../../features/arrows/arrowUtils";
+import { TOKEN_RADIUS } from "../../features/tokens/tokenGeometry";
 
 const toFlatPoints = (points: XY[]): number[] => points.flatMap((p) => [p.x, p.y]);
 
@@ -142,10 +143,25 @@ const getArrowStart = (arrow: ArrowType, frame: Frame, play: Play): XY | null =>
   return null;
 };
 
-const getArrowEnd = (arrow: ArrowType, frame: Frame): XY | null => {
+const getArrowEnd = (arrow: ArrowType, frame: Frame, start: XY | null): XY | null => {
   if (arrow.toTokenId) {
     const target = frame.tokens[arrow.toTokenId];
-    if (target) return target;
+    if (target) {
+      if (start) {
+        const dx = target.x - start.x;
+        const dy = target.y - start.y;
+        const dist = Math.hypot(dx, dy);
+        const shrink = Math.max(dist - TOKEN_RADIUS, 0);
+        if (dist > 0.0001 && shrink > 0) {
+          const scale = shrink / dist;
+          return {
+            x: start.x + dx * scale,
+            y: start.y + dy * scale,
+          };
+        }
+      }
+      return target;
+    }
   }
   if (arrow.toPoint) return arrow.toPoint;
   const last = arrow.points[arrow.points.length - 1];
@@ -176,7 +192,7 @@ const ArrowLayer: React.FC = () => {
       {arrows.map((arrow) => {
         const isSelected = arrow.id === selectedArrowId;
         const start = getArrowStart(arrow, curr, play);
-        const end = getArrowEnd(arrow, curr);
+        const end = getArrowEnd(arrow, curr, start);
         const renderPoints = buildArrowPath(arrow, { start, end });
         const endPoint = renderPoints[renderPoints.length - 1];
         const controlPoint = renderPoints.length >= 3 ? renderPoints[1] : null;
@@ -287,7 +303,7 @@ export const ArrowOverlayLayer: React.FC = () => {
       {arrows.map((arrow) => {
         const isSelected = arrow.id === selectedArrowId;
         const start = getArrowStart(arrow, curr, play);
-        const end = getArrowEnd(arrow, curr);
+        const end = getArrowEnd(arrow, curr, start);
         const renderPoints = buildArrowPath(arrow, { start, end });
 
         return (
