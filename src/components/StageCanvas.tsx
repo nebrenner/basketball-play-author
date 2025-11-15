@@ -16,6 +16,19 @@ const ARROW_LABELS: Record<ArrowKind, string> = {
   pass: "Pass",
 };
 
+const isEditableElement = (target: EventTarget | null): target is HTMLElement => {
+  if (!(target instanceof HTMLElement)) return false;
+  const tag = target.tagName;
+  if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") {
+    return true;
+  }
+  if (target.isContentEditable) {
+    return true;
+  }
+  const role = target.getAttribute("role");
+  return role === "textbox";
+};
+
 const useContainerSize = () => {
   const ref = React.useRef<HTMLDivElement | null>(null);
   const [width, setWidth] = React.useState<number>(0);
@@ -119,14 +132,15 @@ const StageCanvas: React.FC = () => {
 
   React.useEffect(() => {
     const handleKey = (event: KeyboardEvent) => {
-      if (event.key === "Delete" || event.key === "Backspace") {
+      const isEditing = isEditableElement(event.target);
+      if ((event.key === "Delete" || event.key === "Backspace") && !isEditing) {
         const { selectedArrowId, deleteArrow } = usePlayStore.getState();
         if (selectedArrowId) {
           event.preventDefault();
           deleteArrow(selectedArrowId);
         }
       }
-      if (event.key === "Escape") {
+      if (event.key === "Escape" && !isEditing) {
         const state = usePlayStore.getState();
         if (state.selectedArrowId || state.selectedTokenId) {
           event.preventDefault();
@@ -137,6 +151,18 @@ const StageCanvas: React.FC = () => {
     };
     window.addEventListener("keydown", handleKey);
     return () => window.removeEventListener("keydown", handleKey);
+  }, []);
+
+  React.useEffect(() => {
+    const handleFocusIn = (event: FocusEvent) => {
+      if (!isEditableElement(event.target)) return;
+      const state = usePlayStore.getState();
+      if (state.selectedArrowId) {
+        state.setSelectedArrow(null);
+      }
+    };
+    document.addEventListener("focusin", handleFocusIn);
+    return () => document.removeEventListener("focusin", handleFocusIn);
   }, []);
 
   const padding = 8;
