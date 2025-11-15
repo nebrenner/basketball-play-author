@@ -48,3 +48,11 @@ export const PlaySchema = z.object({
 });
 
 export type PlayDTO = z.infer<typeof PlaySchema>;
+
+export const PlayCollectionSchema = z.object({
+  version: z.literal(1),
+  exportedAt: z.string(),
+  plays: z.array(PlaySchema),
+});
+
+export type PlayCollectionDTO = z.infer<typeof PlayCollectionSchema>;

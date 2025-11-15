@@ -9,9 +9,11 @@ import { buildPlayStepSpec, runPlayStep } from "../features/frames/playback";
 import { buildArrowPath } from "../features/arrows/arrowUtils";
 import { ensureFrameGraph, findFrameById, buildPathToFrame, collectPlaybackOrder } from "../features/frames/frameGraph";
 import { TOKEN_RADIUS } from "../features/tokens/tokenGeometry";
-import { PlaySchema } from "./schema";
+import { PlayCollectionSchema, PlaySchema, type PlayCollectionDTO } from "./schema";
 
 type PlayIndexEntry = { id: string; name: string; updatedAt: string };
+
+const PLAY_COLLECTION_VERSION = 1;
 
 type StoreState = {
   stageWidth: number;
@@ -75,6 +77,8 @@ type StoreState = {
   savePlayAsCopy: () => string | null;
   loadPlay: (id: string) => boolean;
   importPlayData: (raw: unknown) => boolean;
+  exportAllPlaysData: () => PlayCollectionDTO;
+  importAllPlaysData: (raw: unknown) => boolean;
   listLocalPlays: () => Array<{ id: string; name: string; updatedAt: string }>;
   deletePlay: (id: string) => void;
 };
@@ -154,6 +158,28 @@ function persistPlay(play: Play) {
     idx.push({ id: play.id, name: play.meta.name, updatedAt: play.meta.updatedAt });
   }
   writeIndex(idx);
+}
+
+function readStoredPlay(id: string): Play | null {
+  const raw = localStorage.getItem(localKey(id));
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    return PlaySchema.parse(parsed);
+  } catch (error) {
+    console.error("Failed to read play", id, error);
+    return null;
+  }
+}
+
+function readAllStoredPlays(): Play[] {
+  const entries = readIndex();
+  const plays: Play[] = [];
+  for (const entry of entries) {
+    const play = readStoredPlay(entry.id);
+    if (play) plays.push(play);
+  }
+  return plays;
 }
 
 const getFrameById = (play: Play | null, id: Id | null | undefined): Frame | null =>
@@ -825,6 +851,35 @@ export const usePlayStore = create<StoreState>()(
         return true;
       } catch (e) {
         console.error("Import failed:", e);
+        return false;
+      }
+    },
+
+    exportAllPlaysData() {
+      return {
+        version: PLAY_COLLECTION_VERSION as 1,
+        exportedAt: new Date().toISOString(),
+        plays: readAllStoredPlays(),
+      } satisfies PlayCollectionDTO;
+    },
+
+    importAllPlaysData(raw: unknown) {
+      try {
+        const parsed = PlayCollectionSchema.parse(raw);
+        const unique = new Map<string, Play>();
+        for (const play of parsed.plays) {
+          unique.set(play.id, play);
+        }
+        unique.forEach((play) => {
+          ensureFrameGraph(play);
+          persistPlay(play);
+        });
+        set((s) => {
+          s.storageRevision += 1;
+        });
+        return true;
+      } catch (error) {
+        console.error("Bulk import failed:", error);
         return false;
       }
     },
