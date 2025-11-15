@@ -12,6 +12,7 @@ const IMAGE_PIXEL_RATIO = 2;
 const PDF_IMAGE_PIXEL_RATIO = 1.1;
 const PDF_IMAGE_MIME_TYPE = "image/jpeg";
 const PDF_IMAGE_QUALITY = 0.7;
+const PDF_IMAGE_MAX_HEIGHT_RATIO = 0.55;
 const VIDEO_PIXEL_RATIO = 1;
 const VIDEO_FPS = 60;
 const FIRST_FRAME_HOLD_MS = 2000;
@@ -230,10 +231,15 @@ export async function exportPlayAsPdf(): Promise<void> {
       const captureMargin = Math.max(0, actualCourtPadding);
       const captureX = captureMargin;
       const captureY = captureMargin;
-      const captureWidth = Math.max(1, stageWidth - actualCourtPadding*2);
-      const captureHeight = Math.max(1, stageHeight - actualCourtPadding*2);
+      const captureWidth = Math.max(1, stageWidth - actualCourtPadding * 2);
+      const captureHeight = Math.max(1, stageHeight - actualCourtPadding * 2);
       const aspectRatio = captureHeight > 0 ? captureWidth / captureHeight : 1;
-      let renderHeight = Math.max(100, remainingHeight);
+      const maxImageHeight = Math.max(
+        100,
+        Math.min(remainingHeight, (pageHeight - margin * 2) * PDF_IMAGE_MAX_HEIGHT_RATIO),
+      );
+      let renderHeight = Math.min(remainingHeight, maxImageHeight);
+      renderHeight = Math.max(100, renderHeight);
       let renderWidth = renderHeight * aspectRatio;
       if (renderWidth > availableWidth) {
         renderWidth = availableWidth;
@@ -270,9 +276,6 @@ export async function exportPlayAsPdf(): Promise<void> {
           pdf.addPage();
           writeHeader();
           cursorY = margin + 28;
-          pdf.setFontSize(16);
-          pdf.text(`${label} – Notes`, margin, cursorY);
-          cursorY += 20;
         }
         pdf.setFontSize(12);
         pdf.text(noteLines, margin, cursorY);
