@@ -20,9 +20,12 @@ const App: React.FC = () => {
   const deletePlay = usePlayStore((s) => s.deletePlay);
   const storageRevision = usePlayStore((s) => s.storageRevision);
   const importPlayData = usePlayStore((s) => s.importPlayData);
+  const exportAllPlays = usePlayStore((s) => s.exportAllPlaysData);
+  const importAllPlays = usePlayStore((s) => s.importAllPlaysData);
   const hasUnsavedChanges = usePlayStore((s) => s.hasUnsavedChanges);
   const [plays, setPlays] = React.useState(() => list());
   const fileInputRef = React.useRef<HTMLInputElement | null>(null);
+  const bulkFileInputRef = React.useRef<HTMLInputElement | null>(null);
 
   React.useEffect(() => {
     setPlays(list());
@@ -106,6 +109,30 @@ const App: React.FC = () => {
     fileInputRef.current?.click();
   }, [confirmDiscardChanges]);
 
+  const handleExportAll = React.useCallback(() => {
+    const payload = exportAllPlays();
+    if (!payload.plays.length) {
+      window.alert("No saved plays available to export.");
+      return;
+    }
+    const serialized = JSON.stringify(payload, null, 2);
+    const blob = new Blob([serialized], { type: "application/json" });
+    const timestamp = payload.exportedAt.replace(/[:.]/g, "-");
+    const filename = `basketball-plays-${timestamp}.json`;
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.href = url;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  }, [exportAllPlays]);
+
+  const handleImportAllClick = React.useCallback(() => {
+    bulkFileInputRef.current?.click();
+  }, []);
+
   const handleCreateNew = React.useCallback(() => {
     if (!confirmDiscardChanges()) return;
     init();
@@ -145,6 +172,42 @@ const App: React.FC = () => {
     },
     [importPlayData],
   );
+
+  const handleImportAll = React.useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      const file = event.target.files?.[0];
+      if (!file) {
+        event.target.value = "";
+        return;
+      }
+
+      const reader = new FileReader();
+      reader.onload = () => {
+        try {
+          const text = typeof reader.result === "string" ? reader.result : "";
+          const data = JSON.parse(text);
+          const ok = importAllPlays(data);
+          if (!ok) {
+            window.alert("Bulk import failed. Please ensure the file is a valid export of saved plays.");
+          }
+        } catch (error) {
+          console.error("Bulk import failed:", error);
+          window.alert("Bulk import failed. Please ensure the file is a valid export of saved plays.");
+        } finally {
+          event.target.value = "";
+        }
+      };
+      reader.onerror = (err) => {
+        console.error("Bulk import failed:", err);
+        window.alert("Bulk import failed while reading the file.");
+        event.target.value = "";
+      };
+      reader.readAsText(file);
+    },
+    [importAllPlays],
+  );
+
+  const hasSavedPlays = plays.length > 0;
 
   return (
     <div className="app-root">
@@ -280,6 +343,21 @@ const App: React.FC = () => {
             Export
           </button>
           <button
+            onClick={handleExportAll}
+            disabled={!hasSavedPlays}
+            style={{
+              padding: "6px 10px",
+              borderRadius: 8,
+              border: "1px solid #374151",
+              background: hasSavedPlays ? "#0b1220" : "#111827",
+              color: "#e5e7eb",
+              opacity: hasSavedPlays ? 1 : 0.5,
+              cursor: hasSavedPlays ? "pointer" : "not-allowed",
+            }}
+          >
+            Export All
+          </button>
+          <button
             onClick={handleImportClick}
             style={{
               padding: "6px 10px",
@@ -291,12 +369,31 @@ const App: React.FC = () => {
           >
             Import
           </button>
+          <button
+            onClick={handleImportAllClick}
+            style={{
+              padding: "6px 10px",
+              borderRadius: 8,
+              border: "1px solid #374151",
+              background: "#0b1220",
+              color: "#e5e7eb",
+            }}
+          >
+            Import All
+          </button>
           <input
             ref={fileInputRef}
             type="file"
             accept="application/json"
             style={{ display: "none" }}
             onChange={handleImport}
+          />
+          <input
+            ref={bulkFileInputRef}
+            type="file"
+            accept="application/json"
+            style={{ display: "none" }}
+            onChange={handleImportAll}
           />
         </div>
         <div style={{ flex: 1 }}>
